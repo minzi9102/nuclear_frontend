@@ -11,24 +11,26 @@ const routes: Array<RouteRecordRaw> = [
     path: '/',
     // 关键点：这里加载的是 Layout 组件，它是父容器
     component: () => import('../views/layout/index.vue'),
-    redirect: '/home', // 访问根路径 / 时，自动跳到 /home
+    // 💡 建议修改：登录后直接跳转到"患者管理"，方便我们调试刚才写的页面
+    redirect: '/patients', 
     // children 里的路由，都会显示在 Layout 组件内部的 <router-view /> 里
     children: [
       {
         path: 'home', // 对应的 URL 是 /home
-        name: '首页',
+        name: 'Home',
         component: () => import('../views/home/index.vue')
       },
-      // 👇 下面这俩是给 Phase 3 预留的坑位
-      // 暂时先把它们也都指向 Home 页面，防止报错，等下一阶段做好了页面再改过来
+      // 👇 核心修改在这里
       {
         path: 'patients',
-        name: '患者管理',
-        component: () => import('../views/home/index.vue')
+        name: 'Patients', // 建议改用英文 Name，中文名称放在 meta 里
+        component: () => import('../views/patients/index.vue'), // ✅ 指向新建的真实文件
+        meta: { title: '患者管理' }
       },
+      // 👇 治疗记录还未开发，继续保持占位
       {
         path: 'treatments',
-        name: '治疗记录',
+        name: 'Treatments',
         component: () => import('../views/home/index.vue')
       }
     ]

@@ -94,12 +94,17 @@ const handleLogin = async () => {
 
 <style scoped>
 .login-container {
+  /* 确保高度占满视口 */
   height: 100vh;
+  /* ⚡️ 新增：强制宽度 100% */
+  width: 100%;
+  /* ⚡️ 新增：防止某些极其微小的溢出导致出现滚动条 */
+  overflow: hidden; 
+  
   display: flex;
   justify-content: center;
   align-items: center;
   background-color: #f0f2f5;
-  /* 一个简单的背景图案，看起来不那么单调 */
   background-image: radial-gradient(#e1e1e1 1px, transparent 1px);
   background-size: 20px 20px;
 }
