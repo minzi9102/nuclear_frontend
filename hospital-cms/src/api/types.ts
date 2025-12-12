@@ -55,7 +55,7 @@ export interface Treatment {
     Gender: string;
   };
   // 图片暂时先定义为数组，后续处理
-  Images?: any[]; 
+  images?: StrapiMedia[]; // 关联的图片数组 
 }
 
 // 治疗记录查询参数 (继承通用的查询结构)
@@ -66,4 +66,26 @@ export interface TreatmentQueryParams {
   'pagination[pageSize]'?: number;
   sort?: string;
   filters?: any;
+}
+
+// Strapi v5 Media Object Structure (Simplified)
+export interface StrapiImageFormat {
+  url: string;
+  width: number;
+  height: number;
+}
+
+export interface StrapiMedia {
+  id: number; // Upload plugin usually returns integer ID for linkage
+  documentId: string;
+  url: string;
+  name: string;
+  width: number;
+  height: number;
+  formats?: {
+    thumbnail?: StrapiImageFormat;
+    small?: StrapiImageFormat;
+    medium?: StrapiImageFormat;
+    large?: StrapiImageFormat;
+  };
 }

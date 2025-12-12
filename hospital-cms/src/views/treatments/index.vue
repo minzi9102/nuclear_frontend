@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { Search, Refresh, Plus, Delete } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Delete, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+
+// 组件引入
+import ImageUploader from '../../components/ImageUploader/index.vue' // 👈 新引入组件
 
 // API 引入
 import { getTreatmentList, deleteTreatment, createTreatment } from '../../api/treatment'
-import { getPatientList } from '../../api/patient' // 需要复用患者列表接口来做搜索
-import type { Treatment, Patient } from '../../api/types'
+import { getPatientList } from '../../api/patient'
+import type { Treatment, Patient, StrapiMedia } from '../../api/types'
 
 // --- 列表数据 ---
 const tableData = ref<Treatment[]>([])
@@ -25,7 +28,7 @@ const dialogVisible = ref(false)
 const formLoading = ref(false)
 const formRef = ref<FormInstance>()
 
-// 治疗部位选项 (硬编码，需与 Strapi 枚举一致)
+// 治疗部位选项
 const targetOptions = [
   'Maxillofacial', 'Chest', 'Abdomen & Buttocks', 
   'Shoulder & Back', 'Limbs', 'Whole Body', 'Multiple Sites'
@@ -33,19 +36,29 @@ const targetOptions = [
 
 // 患者搜索相关
 const patientLoading = ref(false)
-const patientOptions = ref<Patient[]>([]) // 存储搜索到的患者列表
+const patientOptions = ref<Patient[]>([])
 
 // 表单模型
 const formData = reactive({
-  patient: '' as string, // 存储选中的患者 DocumentId
+  patient: '' as string,
   target: '',
-  sequence_number: undefined as number | undefined, // 可选，留空则自动递增
+  sequence_number: undefined as number | undefined,
+  images: [] as StrapiMedia[] // 👈 新增：用于接收组件回传的图片对象数组
 })
 
 // 表单规则
 const rules = {
   patient: [{ required: true, message: '请选择关联患者', trigger: 'change' }],
   target: [{ required: true, message: '请选择治疗部位', trigger: 'change' }]
+}
+
+// --- 工具：获取完整图片路径 (用于列表缩略图) ---
+// ⚠️ 生产环境建议提取到 utils/index.ts
+const getThumbnailUrl = (img: StrapiMedia) => {
+  if (!img || !img.url) return ''
+  // 优先使用缩略图格式，如果没有则用原图
+  const url = img.formats?.thumbnail?.url || img.url
+  return url.startsWith('http') ? url : `http://localhost:1337${url}`
 }
 
 // --- 方法 ---
@@ -57,7 +70,9 @@ const fetchData = async () => {
     const apiParams: any = {
       'pagination[page]': queryParams.page,
       'pagination[pageSize]': queryParams.pageSize,
-      populate: 'patient', // 👈 关键：关联查询
+      // 👈 关键：同时关联 patient 和 images
+      // 写法注意：Strapi v5 populate 语法可能需要对象形式，或者逗号分隔
+      populate: ['patient', 'images'], 
       sort: 'createdAt:desc',
     }
     if (queryParams.treatmentNo) {
@@ -77,17 +92,15 @@ const fetchData = async () => {
   }
 }
 
-// 2. 远程搜索患者 (输入名字，查找患者)
+// 2. 远程搜索患者
 const searchPatients = async (query: string) => {
   if (query) {
     patientLoading.value = true
     try {
       const res: any = await getPatientList({
-        'filters[Name][$contains]': query, // 按姓名模糊搜索
-        'pagination[limit]': 10 // 最多显示10个
+        'filters[Name][$contains]': query,
+        'pagination[limit]': 10
       } as any)
-      
-      // 兼容 Strapi 结构
       patientOptions.value = res.data?.data || res.data || []
     } catch (error) {
       console.error(error)
@@ -105,7 +118,8 @@ const handleCreate = () => {
   formData.patient = ''
   formData.target = ''
   formData.sequence_number = undefined
-  patientOptions.value = [] // 清空搜索记录
+  formData.images = [] // 👈 重置图片列表
+  patientOptions.value = []
   dialogVisible.value = true
 }
 
@@ -119,15 +133,16 @@ const handleSubmit = async () => {
       try {
         // 构造提交数据
         const submitData = {
-          patient: formData.patient, // 传 DocumentId
+          patient: formData.patient,
           target: formData.target,
-          // 如果用户填了数字，就传数字；没填就传 null/undefined 让后端自动算
-          sequence_number: formData.sequence_number 
+          sequence_number: formData.sequence_number,
+          // 👈 关键步骤：将图片对象数组转换为 ID 数组传给 Strapi
+          Images: formData.images.map(img => img.id)
         }
 
         await createTreatment(submitData)
         
-        ElMessage.success('创建成功，序号已自动生成')
+        ElMessage.success('创建成功')
         dialogVisible.value = false
         fetchData() // 刷新列表
       } catch (error) {
@@ -174,12 +189,28 @@ onMounted(() => {
       </div>
 
       <el-table v-loading="loading" :data="tableData" border style="margin-top: 20px">
-        <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="treatmentNo" label="编号" width="120">
            <template #default="{ row }">
              <el-tag>{{ row.treatmentNo }}</el-tag>
            </template>
         </el-table-column>
+        
+        <el-table-column label="影像资料" width="120">
+          <template #default="{ row }">
+            <div v-if="row.Images && row.Images.length > 0" style="display: flex; align-items: center;">
+              <el-image 
+                style="width: 40px; height: 40px; border-radius: 4px; margin-right: 5px;"
+                :src="getThumbnailUrl(row.Images[0])"
+                :preview-src-list="row.Images.map((img: StrapiMedia) => getThumbnailUrl(img).replace('thumbnail_', ''))"
+                preview-teleported
+                fit="cover"
+              />
+              <span v-if="row.Images.length > 1" style="font-size: 12px; color: #909399;">+{{ row.Images.length - 1 }}</span>
+            </div>
+            <span v-else style="color: #dcdfe6;">-</span>
+          </template>
+        </el-table-column>
+
         <el-table-column label="关联患者" width="150">
           <template #default="{ row }">
             <span v-if="row.patient">{{ row.patient.Name }}</span>
@@ -187,7 +218,6 @@ onMounted(() => {
           </template>
         </el-table-column>
         <el-table-column prop="target" label="部位" />
-        <el-table-column prop="sequence_number" label="序号(Debug)" width="100" />
         <el-table-column prop="createdAt" label="创建时间" />
         <el-table-column label="操作" fixed="right" width="100">
           <template #default="{ row }">
@@ -201,7 +231,7 @@ onMounted(() => {
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="新建治疗记录" width="500px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" title="新建治疗记录" width="600px" :close-on-click-modal="false" destroy-on-close>
       <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
         
         <el-form-item label="选择患者" prop="patient">
@@ -230,10 +260,14 @@ onMounted(() => {
           </el-select>
         </el-form-item>
 
+        <el-form-item label="治疗影像" prop="images">
+          <image-uploader v-model="formData.images" :limit="10" />
+        </el-form-item>
+
         <el-form-item label="手动序号" prop="sequence_number">
           <el-input-number v-model="formData.sequence_number" :min="1" placeholder="留空自动生成" style="width: 100%" />
           <div style="font-size: 12px; color: #999; margin-top: 5px; line-height: 1.2;">
-            通常无需填写。仅在需要“跳号”或“重置序号”时手动输入。
+            通常无需填写。
           </div>
         </el-form-item>
 
