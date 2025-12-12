@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { Plus, ZoomIn, Delete, Download } from '@element-plus/icons-vue'
+import { ref, watch, reactive } from 'vue'
+import { Plus } from '@element-plus/icons-vue'
 import type { UploadRequestOptions, UploadUserFile, UploadFile, UploadFiles } from 'element-plus'
 import { uploadFile } from '../../api/upload'
 import type { StrapiMedia } from '../../api/types'
@@ -13,7 +13,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   modelValue: () => [],
-  limit: 5
+  limit: 10
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -32,89 +32,124 @@ const fileList = ref<UploadUserFile[]>([])
 const dialogImageUrl = ref('')
 const dialogVisible = ref(false)
 
-// --- 回显逻辑 (防止死循环) ---
+// 🔥 核心武器：uid 到 后端数据的映射表
+const uploadResultMap = reactive(new Map<number, StrapiMedia>())
+
+// --- 1. 回显逻辑 ---
 watch(() => props.modelValue, (newVal) => {
-  // 1. 如果父组件传 null/undefined，忽略
+  if ((!newVal || newVal.length === 0) && fileList.value.length > 0) {
+    if (fileList.value.every(f => f.status === 'success')) {
+       console.log('🔄 [组件回显] 父组件数据为空，清空本地列表')
+       fileList.value = []
+       uploadResultMap.clear()
+    }
+    return
+  }
+  
   if (!newVal) return
 
-  // 2. 提取 ID 进行比对
-  const currentIds = fileList.value
-    .map(f => (f.response as StrapiMedia)?.id)
-    .filter(Boolean)
+  const currentIds = fileList.value.map(f => (f.response as StrapiMedia)?.id).filter(Boolean)
   const newIds = newVal.map(img => img.id)
-  
-  // 3. 只有当 ID 列表不一致时，才更新本地 fileList
-  // 这防止了：子组件 emit -> 父组件 update -> 子组件 watch -> 子组件 reset -> 再次 emit 的死循环
   const isSame = currentIds.length === newIds.length && currentIds.every((id, index) => id === newIds[index])
   
   if (!isSame) {
-    console.log('🔄 组件：响应式更新 fileList (来自父组件)', newIds)
-    fileList.value = newVal.map(img => ({
-      name: img.name,
-      url: getFullUrl(img.url),
-      response: img, 
-      uid: img.id, // 保持 uid 与 id 一致
-      status: 'success'
-    }))
+    console.log('🔄 [组件回显] 根据父组件数据重建列表', newIds)
+    fileList.value = newVal.map(img => {
+      // 存入 Map
+      uploadResultMap.set(img.id, img)
+      
+      return {
+        name: img.name,
+        url: getFullUrl(img.url),
+        response: img, 
+        uid: img.id,   
+        status: 'success'
+      }
+    })
   }
 }, { immediate: true, deep: true })
 
-// --- 核心逻辑：数据同步 ---
+// --- 2. 核心：同步给父组件 ---
 const syncToParent = () => {
-  // 过滤出所有已经上传成功(有response)的文件
-  const latestMediaList = fileList.value
-    .filter(f => f.status === 'success' && f.response)
-    .map(f => f.response as StrapiMedia)
+  const validImages: StrapiMedia[] = []
+
+  fileList.value.forEach((file) => {
+    // 修复点：使用 file.uid! 进行非空断言，或者 || 0
+    const uid = file.uid || 0 
+    const cachedData = uploadResultMap.get(uid)
+    
+    if (cachedData) {
+      validImages.push(cachedData)
+      if (!file.url || file.url.startsWith('blob:')) {
+         file.url = getFullUrl(cachedData.url)
+      }
+    } else if (file.response && (file.response as StrapiMedia).id) {
+      validImages.push(file.response as StrapiMedia)
+    }
+  })
   
-  // 只有当真正有变化时才 log，避免刷屏
-  console.log('📤 组件：同步数据给父组件 -> 数量:', latestMediaList.length, 'IDs:', latestMediaList.map(m => m.id))
+  console.log('📤 [同步发射] 有效图片:', validImages.length, 'IDs:', validImages.map(img => img.id))
   
-  emit('update:modelValue', latestMediaList)
+  emit('update:modelValue', validImages)
 }
 
-// --- 自定义上传 (核心修复点) ---
+// --- 3. 自定义上传 ---
 const customUploadRequest = async (options: UploadRequestOptions) => {
   const { file, onSuccess, onError } = options
+  // 修复点：Element Plus 注入的 raw file 对象其实带有 uid，但 TS 的 File 类型不知道
+  // 我们强制断言它有 uid
+  const uid = (file as any).uid as number 
+  
   try {
-    console.log('⬆️ 组件：开始上传...', file.name)
+    console.log(`⬆️ [上传开始] 文件: ${file.name} (uid: ${uid})`)
     const res = await uploadFile(file as File)
-    console.log('✅ 组件：上传API成功，获得ID:', res.id)
+    console.log(`✅ [上传API成功] Server返回 ID: ${res.id}`)
     
-    // 1. 立即更新本地 fileList 中的该文件状态
-    const activeFile = fileList.value.find(f => f.uid === file.uid)
-    if (activeFile) {
-      activeFile.response = res // 关键：手动挂载 Strapi 返回的对象
-      activeFile.url = getFullUrl(res.url) // 更新预览图
-      activeFile.status = 'success' // 手动标记成功
+    // 存入 Map
+    if (uid) {
+      uploadResultMap.set(uid, res)
+      console.log(`💾 [Map存储] 已记录 uid ${uid} -> ID ${res.id}`)
     }
 
-    // 2. 立即同步给父组件 (不再等待 handleSuccess)
-    syncToParent()
-
-    // 3. 告诉 Element Plus 组件完事了 (但这只是为了关闭加载动画)
     onSuccess(res)
   } catch (error: any) {
-    console.error('❌ 组件：上传失败', error)
+    console.error('❌ [上传失败]', error)
     onError(error)
   }
 }
 
-// --- 成功回调 (被阉割版) ---
-const handleSuccess = (response: any, uploadFile: UploadFile, uploadFiles: UploadFiles) => {
-  // 🛑 关键修复：绝对不要在这里执行 fileList.value = uploadFiles
-  // Element Plus 的 uploadFiles 状态更新可能滞后，会覆盖掉我们在 customUploadRequest 里手动设置好的完整数据
-  // 这里什么都不用做，或者仅仅再次触发同步兜底
+// --- 4. 监听变动 ---
+const handleChange = (uploadFile: UploadFile, uploadFiles: UploadFiles) => {
+  // 修复点：update local list ref
+  fileList.value = uploadFiles
+  
+  // 尝试恢复数据
+  fileList.value.forEach(f => {
+    // 修复点：使用 f.uid!
+    if (f.uid && uploadResultMap.has(f.uid) && !f.response) {
+      // console.log(`✨ [数据恢复] 恢复文件 [${f.name}]`)
+      f.response = uploadResultMap.get(f.uid)
+      f.status = 'success'
+    }
+  })
+
+  if (uploadFile.status === 'success') {
+    syncToParent()
+  }
 }
 
-// --- 删除回调 ---
 const handleRemove = (uploadFile: UploadFile, uploadFiles: UploadFiles) => {
-  console.log('🗑️ 组件：用户删除了图片')
-  // 删除时，可以直接信任 uploadFiles，因为它确实少了一个
+  console.log('🗑️ [删除操作]')
+  // 修复点：使用 uploadFile.uid!
+  if (uploadFile.uid) {
+    uploadResultMap.delete(uploadFile.uid)
+  }
+  
   fileList.value = uploadFiles
   syncToParent()
 }
 
-// --- 预览相关 ---
+// 预览
 const handlePictureCardPreview = (file: UploadFile) => {
   dialogImageUrl.value = file.url!
   dialogVisible.value = true
@@ -127,8 +162,9 @@ const handlePictureCardPreview = (file: UploadFile) => {
       v-model:file-list="fileList"
       action="#" 
       list-type="picture-card"
+      multiple
       :http-request="customUploadRequest"
-      :on-success="handleSuccess"
+      :on-change="handleChange"
       :on-remove="handleRemove"
       :on-preview="handlePictureCardPreview"
       :limit="props.limit"
