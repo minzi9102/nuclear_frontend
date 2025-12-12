@@ -199,7 +199,7 @@ onMounted(() => {
         
         <el-table-column prop="Gender" label="性别" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.Gender === 'male' ? '' : 'danger'">
+            <el-tag :type="row.Gender === 'male' ? 'primary' : 'danger'">
               {{ row.Gender === 'male' ? '男' : '女' }}
             </el-tag>
           </template>

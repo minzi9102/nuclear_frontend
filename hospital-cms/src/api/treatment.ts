@@ -13,6 +13,16 @@ export const getTreatmentList = (params: TreatmentQueryParams) => {
 }
 
 // 删除治疗记录
-export const deleteTreatment = (id: number) => {
-  return request.delete<any, any>(`/treatments/${id}`)
+export const deleteTreatment = (documentId: string) => {
+  return request.delete(`/treatments/${documentId}`)
+}
+
+// ✨ 新增：创建治疗记录
+export const createTreatment = (data: any) => {
+  return request.post('/treatments', { data })
+}
+
+// ✨ 新增：更新治疗记录
+export const updateTreatment = (documentId: string, data: any) => {
+  return request.put(`/treatments/${documentId}`, { data })
 }
