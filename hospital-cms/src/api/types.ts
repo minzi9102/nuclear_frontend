@@ -28,3 +28,42 @@ export interface PatientQueryParams {
   'filters[Name][$contains]'?: string; // 用于搜索
   sort?: string; // 例如 'createdAt:desc'
 }
+
+// 治疗部位枚举 (参考 Swagger)
+export type TreatmentTarget = 
+  | 'Maxillofacial' 
+  | 'Chest' 
+  | 'Abdomen & Buttocks' 
+  | 'Shoulder & Back' 
+  | 'Limbs' 
+  | 'Whole Body' 
+  | 'Multiple Sites';
+
+// 治疗记录实体
+export interface Treatment {
+  id: number;
+  documentId: string;
+  treatmentNo: string;        // 治疗编号
+  target: TreatmentTarget;    // 治疗部位
+  sequence_number: number;    // 序号
+  createdAt: string;
+  // 关键：关联的患者信息 (可能为空)
+  patient?: {
+    id: number;
+    documentId: string;
+    Name: string;
+    Gender: string;
+  };
+  // 图片暂时先定义为数组，后续处理
+  Images?: any[]; 
+}
+
+// 治疗记录查询参数 (继承通用的查询结构)
+// 通常可以直接复用之前的，或者单独定义
+export interface TreatmentQueryParams {
+  populate?: string | string[]; // 关键参数：用于查询关联字段
+  'pagination[page]'?: number;
+  'pagination[pageSize]'?: number;
+  sort?: string;
+  filters?: any;
+}

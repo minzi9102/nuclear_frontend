@@ -32,6 +32,13 @@ const routes: Array<RouteRecordRaw> = [
         path: 'treatments',
         name: 'Treatments',
         component: () => import('../views/home/index.vue')
+      },
+
+      {
+      path: 'treatments', // 访问路径 /treatments
+      name: 'Treatments',
+      component: () => import('../views/treatments/index.vue'),
+      meta: { title: '治疗记录' }
       }
     ]
   }
