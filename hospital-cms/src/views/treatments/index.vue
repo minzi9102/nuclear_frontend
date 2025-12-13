@@ -11,6 +11,9 @@ import { getTreatmentList, deleteTreatment, createTreatment } from '../../api/tr
 import { getPatientList } from '../../api/patient'
 import type { Treatment, Patient, StrapiMedia } from '../../api/types'
 
+// 1. 定义 Base URL
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1337'
+
 // --- 列表数据 ---
 const tableData = ref<Treatment[]>([])
 const loading = ref(false)
@@ -58,7 +61,7 @@ const getThumbnailUrl = (img: StrapiMedia) => {
   if (!img || !img.url) return ''
   // 优先使用缩略图格式，如果没有则用原图
   const url = img.formats?.thumbnail?.url || img.url
-  return url.startsWith('http') ? url : `http://localhost:1337${url}`
+  return url.startsWith('http') ? url : `${BASE_URL}${url}`
 }
 
 // --- 方法 ---

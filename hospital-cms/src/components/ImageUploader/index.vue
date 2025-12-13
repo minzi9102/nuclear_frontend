@@ -19,7 +19,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits(['update:modelValue'])
 
 // --- 基础配置 ---
-const BASE_URL = 'http://localhost:1337' 
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1337' 
 
 const getFullUrl = (url: string) => {
   if (!url) return ''

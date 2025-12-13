@@ -6,7 +6,8 @@ import router from '../router' // 引入我们刚才创建的路由，用于跳�
 // 1. 创建 axios 实例
 const service: AxiosInstance = axios.create({
   // 根据你的要求配置 baseURL
-  baseURL: 'http://localhost:1337/api', 
+  // baseURL: 'http://localhost:1337/api', 
+  baseURL: (import.meta.env.VITE_API_URL || 'http://localhost:1337') + '/api',
   // 设置请求超时时间（10秒）
   timeout: 10000 
 })
