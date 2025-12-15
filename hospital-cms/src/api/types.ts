@@ -19,14 +19,16 @@ export interface Patient {
   Gender: 'male' | 'female';
   Birthday: string;
   treatmentNo?: string; // 如果列表中需要展示治疗号
+  treatments?: Treatment[];
 }
 
 // 查询参数接口
 export interface PatientQueryParams {
-  'pagination[page]': number;
-  'pagination[pageSize]': number;
-  'filters[Name][$contains]'?: string; // 用于搜索
-  sort?: string; // 例如 'createdAt:desc'
+  page?: number;      // 对应 pagination[page]
+  pageSize?: number;  // 对应 pagination[pageSize]
+  filters?: any;      // 对应 filters[xxx]
+  sort?: string | string[]; // 排序
+  [key: string]: any; // 允许其他动态参数 (如 populate)
 }
 
 // 治疗部位枚举 (参考 Swagger)
@@ -48,14 +50,9 @@ export interface Treatment {
   sequence_number: number;    // 序号
   createdAt: string;
   // 关键：关联的患者信息 (可能为空)
-  patient?: {
-    id: number;
-    documentId: string;
-    Name: string;
-    Gender: string;
-  };
+  patient?: Patient;
   // 图片暂时先定义为数组，后续处理
-  images?: StrapiMedia[]; // 关联的图片数组 
+  Images?: StrapiMedia[]; // 关联的图片数组 
 }
 
 // 治疗记录查询参数 (继承通用的查询结构)
