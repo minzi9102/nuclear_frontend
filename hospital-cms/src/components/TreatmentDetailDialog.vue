@@ -2,9 +2,9 @@
   <el-dialog 
     v-model="visible" 
     title="治疗记录详情" 
-    width="700px" 
-    align-center
+    width="90%"               style="max-width: 450px;" align-center
     destroy-on-close
+    append-to-body
   >
     <div v-if="loading" class="py-10 text-center">
       <el-icon class="is-loading text-3xl text-blue-500"><Loading /></el-icon>
