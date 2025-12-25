@@ -10,6 +10,8 @@ import type { Patient } from '../../api/types'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import TreatmentDetailDialog from '../../components/TreatmentDetailDialog.vue'
 
+import { TREATMENT_TARGET_MAP } from '../../constants/treatment' // 💡 引入翻译映射
+
 // --- 数据定义 ---
 const loading = ref(false)
 const tableData = ref<Patient[]>([])
@@ -253,7 +255,8 @@ onMounted(() => {
                     <el-icon class="text-blue-400"><ArrowRight /></el-icon>
                   </div>
                   <div class="mt-2 text-xs text-gray-600 bg-white/60 px-2 py-1 rounded inline-block">
-                    {{ patient.treatments?.[0]?.target }}
+                    <!-- {{ patient.treatments?.[0]?.target }} -->
+                    {{ TREATMENT_TARGET_MAP[patient.treatments?.[0]?.target as string] || patient.treatments?.[0]?.target }}
                   </div>
                 </div>
 

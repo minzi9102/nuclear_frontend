@@ -1,3 +1,5 @@
+import { TREATMENT_TARGET_MAP } from '../constants/treatment';
+
 // 通用列表响应结构
 export interface ApiResponse<T> {
   data: T[];
@@ -18,54 +20,48 @@ export interface Patient {
   Name: string;       // 注意大写
   Gender: 'male' | 'female';
   Birthday: string;
-  treatmentNo?: string; // 如果列表中需要展示治疗号
+  treatmentNo?: string; 
   treatments?: Treatment[];
 }
 
 // 查询参数接口
 export interface PatientQueryParams {
-  page?: number;      // 对应 pagination[page]
-  pageSize?: number;  // 对应 pagination[pageSize]
-  filters?: any;      // 对应 filters[xxx]
-  sort?: string | string[]; // 排序
-  [key: string]: any; // 允许其他动态参数 (如 populate)
+  page?: number;
+  pageSize?: number;
+  filters?: any;
+  sort?: string | string[];
+  [key: string]: any; 
 }
 
-// 治疗部位枚举 (参考 Swagger)
-export type TreatmentTarget = 
-  | 'Maxillofacial' 
-  | 'Chest' 
-  | 'Abdomen & Buttocks' 
-  | 'Shoulder & Back' 
-  | 'Limbs' 
-  | 'Whole Body' 
-  | 'Multiple Sites';
+/**
+ * 💡 核心修改：治疗部位类型
+ * 使用 keyof typeof 从常量映射表中自动推导类型
+ * 结果等同于：'Maxillofacial' | 'Chest' | 'Abdomen & Buttocks' ...
+ */
+export type TreatmentTarget = keyof typeof TREATMENT_TARGET_MAP;
 
 // 治疗记录实体
 export interface Treatment {
   id: number;
   documentId: string;
   treatmentNo: string;        // 治疗编号
-  target: TreatmentTarget;    // 治疗部位
+  target: TreatmentTarget;    // 治疗部位 (已关联强类型)
   sequence_number: number;    // 序号
   createdAt: string;
-  // 关键：关联的患者信息 (可能为空)
-  patient?: Patient;
-  // 图片暂时先定义为数组，后续处理
-  Images?: StrapiMedia[]; // 关联的图片数组 
+  patient?: Patient;          // 关联的患者信息
+  Images?: StrapiMedia[];     // 关联的图片数组 
 }
 
-// 治疗记录查询参数 (继承通用的查询结构)
-// 通常可以直接复用之前的，或者单独定义
+// 治疗记录查询参数
 export interface TreatmentQueryParams {
-  populate?: string | string[]; // 关键参数：用于查询关联字段
+  populate?: string | string[];
   'pagination[page]'?: number;
   'pagination[pageSize]'?: number;
   sort?: string;
   filters?: any;
 }
 
-// Strapi v5 Media Object Structure (Simplified)
+// Strapi v5 Media Object Structure
 export interface StrapiImageFormat {
   url: string;
   width: number;
@@ -73,7 +69,7 @@ export interface StrapiImageFormat {
 }
 
 export interface StrapiMedia {
-  id: number; // Upload plugin usually returns integer ID for linkage
+  id: number; 
   documentId: string;
   url: string;
   name: string;

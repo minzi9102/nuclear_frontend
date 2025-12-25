@@ -4,12 +4,15 @@ import { Search, Refresh, Plus, Delete, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 
 // 组件引入
-import ImageUploader from '../../components/ImageUploader/index.vue' // 👈 新引入组件
+import ImageUploader from '../../components/ImageUploader/index.vue'
 
 // API 引入
 import { getTreatmentList, deleteTreatment, createTreatment } from '../../api/treatment'
 import { getPatientList } from '../../api/patient'
 import type { Treatment, Patient, StrapiMedia } from '../../api/types'
+
+// 💡 引入规范定义的常量
+import { TREATMENT_TARGET_MAP, TARGET_OPTIONS } from '../../constants/treatment';
 
 // 1. 定义 Base URL
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1337'
@@ -31,11 +34,8 @@ const dialogVisible = ref(false)
 const formLoading = ref(false)
 const formRef = ref<FormInstance>()
 
-// 治疗部位选项
-const targetOptions = [
-  'Maxillofacial', 'Chest', 'Abdomen & Buttocks', 
-  'Shoulder & Back', 'Limbs', 'Whole Body', 'Multiple Sites'
-]
+// 💡 使用常量定义的选项
+const targetOptions = TARGET_OPTIONS;
 
 // 患者搜索相关
 const patientLoading = ref(false)
@@ -46,7 +46,7 @@ const formData = reactive({
   patient: '' as string,
   target: '',
   sequence_number: undefined as number | undefined,
-  images: [] as StrapiMedia[] // 👈 新增：用于接收组件回传的图片对象数组
+  images: [] as StrapiMedia[]
 })
 
 // 表单规则
@@ -55,11 +55,9 @@ const rules = {
   target: [{ required: true, message: '请选择治疗部位', trigger: 'change' }]
 }
 
-// --- 工具：获取完整图片路径 (用于列表缩略图) ---
-// ⚠️ 生产环境建议提取到 utils/index.ts
+// --- 工具：获取完整图片路径 ---
 const getThumbnailUrl = (img: StrapiMedia) => {
   if (!img || !img.url) return ''
-  // 优先使用缩略图格式，如果没有则用原图
   const url = img.formats?.thumbnail?.url || img.url
   return url.startsWith('http') ? url : `${BASE_URL}${url}`
 }
@@ -73,9 +71,7 @@ const fetchData = async () => {
     const apiParams: any = {
       'pagination[page]': queryParams.page,
       'pagination[pageSize]': queryParams.pageSize,
-      // 👈 关键：同时关联 patient 和 images
-      // 写法注意：Strapi v5 populate 语法可能需要对象形式，或者逗号分隔
-      populate: ['patient', 'images'], 
+      populate: ['patient', 'Images'], // 注意：Strapi 字段名 Images 通常大写
       sort: 'createdAt:desc',
     }
     if (queryParams.treatmentNo) {
@@ -117,11 +113,10 @@ const searchPatients = async (query: string) => {
 
 // 3. 打开新建弹窗
 const handleCreate = () => {
-  // 重置表单
   formData.patient = ''
   formData.target = ''
   formData.sequence_number = undefined
-  formData.images = [] // 👈 重置图片列表
+  formData.images = []
   patientOptions.value = []
   dialogVisible.value = true
 }
@@ -134,12 +129,10 @@ const handleSubmit = async () => {
     if (valid) {
       formLoading.value = true
       try {
-        // 构造提交数据
         const submitData = {
           patient: formData.patient,
           target: formData.target,
           sequence_number: formData.sequence_number,
-          // 👈 关键步骤：将图片对象数组转换为 ID 数组传给 Strapi
           Images: formData.images.map(img => img.id)
         }
 
@@ -147,7 +140,7 @@ const handleSubmit = async () => {
         
         ElMessage.success('创建成功')
         dialogVisible.value = false
-        fetchData() // 刷新列表
+        fetchData()
       } catch (error) {
         console.error(error)
         ElMessage.error('创建失败')
@@ -193,9 +186,9 @@ onMounted(() => {
 
       <el-table v-loading="loading" :data="tableData" border style="margin-top: 20px">
         <el-table-column prop="treatmentNo" label="编号" width="120">
-           <template #default="{ row }">
-             <el-tag>{{ row.treatmentNo }}</el-tag>
-           </template>
+            <template #default="{ row }">
+              <el-tag>{{ row.treatmentNo }}</el-tag>
+            </template>
         </el-table-column>
         
         <el-table-column label="影像资料" width="120">
@@ -220,8 +213,19 @@ onMounted(() => {
             <el-tag v-else type="warning">无关联</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="target" label="部位" />
-        <el-table-column prop="createdAt" label="创建时间" />
+
+        <el-table-column label="部位">
+          <template #default="{ row }">
+            {{ TREATMENT_TARGET_MAP[row.target] || row.target }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="createdAt" label="创建时间">
+          <template #default="{ row }">
+            {{ new Date(row.createdAt).toLocaleString() }}
+          </template>
+        </el-table-column>
+
         <el-table-column label="操作" fixed="right" width="100">
           <template #default="{ row }">
             <el-button link type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
@@ -259,7 +263,12 @@ onMounted(() => {
 
         <el-form-item label="治疗部位" prop="target">
           <el-select v-model="formData.target" placeholder="请选择" style="width: 100%">
-            <el-option v-for="t in targetOptions" :key="t" :label="t" :value="t" />
+            <el-option 
+              v-for="item in targetOptions" 
+              :key="item.value" 
+              :label="item.label" 
+              :value="item.value" 
+            />
           </el-select>
         </el-form-item>
 

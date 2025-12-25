@@ -19,7 +19,10 @@
             治疗时间：{{ new Date(detail.createdAt).toLocaleString() }}
           </p>
         </div>
-        <el-tag effect="dark" size="large">{{ detail.target }}</el-tag>
+        <el-tag effect="dark" size="large">
+          <!-- {{ detail.target }} -->
+          {{ TREATMENT_TARGET_MAP[detail.target] || detail.target }}
+        </el-tag>
       </div>
 
       <div class="mb-4">
@@ -48,6 +51,7 @@ import { Loading } from '@element-plus/icons-vue'
 import { getTreatmentDetail } from '../api/treatment'
 import type { Treatment } from '../api/types'
 import { ElMessage } from 'element-plus'
+import { TREATMENT_TARGET_MAP } from '../constants/treatment' // 💡 引入翻译映射
 
 const visible = ref(false)
 const loading = ref(false)
