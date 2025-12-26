@@ -57,6 +57,8 @@ const queryParams = reactive({
   keyword: ''
 })
 
+const isMobile = ref(window.innerWidth <= 768)
+
 // --- 辅助工具函数 ---
 
 // 1. 根据生日计算年龄
@@ -297,7 +299,7 @@ watch(() => formData.past_treatments, (newVal, oldVal) => {
     <el-drawer
       v-model="drawerVisible"
       title="🔍 高级搜索"
-      size="380px"
+      :size="isMobile ? '100%' : '380px'" 
       destroy-on-close
     >
       <el-form :model="advancedSearchForm" label-position="top" class="p-2">
@@ -631,14 +633,69 @@ watch(() => formData.past_treatments, (newVal, oldVal) => {
 .w-full { width: 100%; }
 .scale-90 { transform: scale(0.9); }
 
-/* 移动端特殊优化 */
-@media (max-width: 640px) {
-  .app-container {
-    padding: 12px;
+/* 移动端特殊优化 - 针对搜索栏组件溢出的修复 */
+@media (max-width: 768px) {
+  .header-actions {
+    flex-direction: column; /* 容器改为垂直排列 */
+    align-items: stretch;   /* 子元素占满宽度 */
+    gap: 10px;
   }
-  .patient-card {
-    /* 增加阴影，使其在手机白色背景上更突出 */
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+
+  .search-box {
+    display: flex;
+    flex-wrap: wrap;       /* 允许搜索组内部换行 */
+    gap: 8px;
+    width: 100%;
+  }
+
+  /* 令输入框在手机端独占第一行，按钮排在下方 */
+  .search-box :deep(.el-input) {
+    order: -1;             /* 强制排在最前 */
+    flex: none;
+    width: 100%;
+  }
+
+  /* 搜索和高级搜索按钮平分剩余行 */
+  .search-box .el-button {
+    flex: 1;
+    margin: 0;             /* 清除可能的边距 */
+  }
+
+  /* 新建按钮在手机端独占一行，提升操作便利性 */
+  .create-btn {
+    width: 100%;
+    margin-left: 0 !important; /* 强制覆盖 flex 的 gap 或 margin */
+  }
+
+  /* 1. 强制表单项宽度并消除可能导致溢出的 padding */
+  :deep(.el-drawer__body) {
+    padding: 15px !important;
+  }
+
+  /* 2. 修复日期范围选择器溢出 (最核心修改) */
+  :deep(.el-range-editor.el-input__wrapper) {
+    width: 100% !important;
+    box-sizing: border-box;
+    display: inline-flex;
+    /* 缩小中间“至”字的间距 */
+    padding: 0 5px; 
+  }
+
+  /* 针对日期选择器内部的输入框，缩小字体防止挤压 */
+  :deep(.el-range-input) {
+    width: 40% !important;
+    font-size: 12px !important;
+  }
+
+  /* 3. 底部按钮适配：如果文字太长，改为上下排列 */
+  :deep(.el-drawer__footer) .flex {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  :deep(.el-drawer__footer) .el-button {
+    width: 100%;
+    margin-left: 0 !important;
   }
 }
 
