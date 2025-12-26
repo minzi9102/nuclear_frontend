@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { 
   Search, Plus, Edit, Delete, 
   Male, Female, Calendar, Timer, 
@@ -10,8 +10,8 @@ import type { Patient } from '../../api/types'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import TreatmentDetailDialog from '../../components/TreatmentDetailDialog.vue'
 
-import { TREATMENT_TARGET_MAP } from '../../constants/treatment' // 💡 引入翻译映射
-
+import { TREATMENT_TARGET_MAP,PAST_TREATMENT_MAP, PAST_TREATMENT_OPTIONS } from '../../constants/treatment' // 💡 引入翻译映射
+import type { PastTreatment } from '../../constants/treatment' // 如果你定义了类型
 // --- 数据定义 ---
 const loading = ref(false)
 const tableData = ref<Patient[]>([])
@@ -29,7 +29,8 @@ const formData = reactive({
   documentId: undefined as string | undefined,
   Name: '',
   Gender: 'male', 
-  Birthday: ''
+  Birthday: '',
+  past_treatments: ['none'] as PastTreatment[] // ✨ 新增字段，初始化为["none"]
 })
 
 // 校验规则
@@ -126,6 +127,7 @@ const handleCreate = () => {
   formData.Name = ''
   formData.Gender = 'male'
   formData.Birthday = ''
+  formData.past_treatments = ['none'] // ✨ 确保初始化为["none"]
   dialogVisible.value = true
 }
 
@@ -135,6 +137,7 @@ const handleEdit = (row: Patient) => {
   formData.Name = row.Name
   formData.Gender = row.Gender as string 
   formData.Birthday = row.Birthday
+  formData.past_treatments = Array.isArray(row.past_treatments) ? row.past_treatments : []
   dialogVisible.value = true
 }
 
@@ -169,6 +172,25 @@ const handleViewTreatment = (documentId: string) => {
 onMounted(() => {
   fetchData()
 })
+
+// 监听多选框的变化
+watch(() => formData.past_treatments, (newVal, oldVal) => {
+  if (newVal.length > 1) {
+    // 1. 如果新勾选了其他选项，且之前有“无”，则去掉“无”
+    if (newVal.includes('none') && oldVal.includes('none')) {
+      formData.past_treatments = newVal.filter(item => item !== 'none')
+    } 
+    // 2. 如果新勾选了“无”，则去掉其他所有选项
+    else if (newVal.includes('none') && !oldVal.includes('none')) {
+      formData.past_treatments = ['none']
+    }
+  }
+  // 3. 如果全部取消勾选，强制恢复为“无” (可选)
+  if (newVal.length === 0) {
+    formData.past_treatments = ['none']
+  }
+}, { deep: true })
+
 </script>
 
 <template>
@@ -229,6 +251,17 @@ onMounted(() => {
                 <span>生日: {{ patient.Birthday }}</span>
               </div>
 
+              <div class="info-row text-gray-500 text-xs mb-3 flex items-start gap-2">
+                <el-icon class="mt-0.5"><FolderOpened /></el-icon>
+                <div class="flex-1">
+                  <span class="font-bold">既往治疗: </span>
+                  <span v-if="patient.past_treatments?.length">
+                    {{ patient.past_treatments.map(key => PAST_TREATMENT_MAP[key] || key).join('、') }}
+                  </span>
+                  <span v-else class="text-gray-300">暂无信息</span>
+                </div>
+              </div>
+
               <div class="treatment-section mt-4">
                 <div class="flex justify-between items-center mb-2">
                   <span class="text-xs font-bold text-gray-400 uppercase">最近治疗</span>
@@ -275,7 +308,7 @@ onMounted(() => {
                 >
                   <template #reference>
                      <el-button link type="info" size="small">
-                       <el-icon class="mr-1"><FolderOpened /></el-icon> 更多历史
+                       <el-icon class="mr-1"><FolderOpened /></el-icon> 全部历史
                      </el-button>
                   </template>
                   <div class="history-list max-h-48 overflow-y-auto">
@@ -342,6 +375,19 @@ onMounted(() => {
             size="large"
             value-format="YYYY-MM-DD"
           />
+        </el-form-item>
+        <el-form-item label="有无接受过其他治疗" prop="past_treatments">
+          <el-checkbox-group v-model="formData.past_treatments">
+            <el-checkbox 
+              v-for="opt in PAST_TREATMENT_OPTIONS" 
+              :key="opt.value" 
+              :label="opt.value"
+              border
+              class="mb-2 mr-2 ml-0"
+            >
+              {{ opt.label }}
+            </el-checkbox>
+          </el-checkbox-group>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -440,5 +486,21 @@ onMounted(() => {
     /* 增加阴影，使其在手机白色背景上更突出 */
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
+}
+
+/* 让多选框在弹窗中排列整齐 */
+:deep(.el-checkbox.is-bordered) {
+  margin-left: 0 !important;
+  margin-right: 8px !important;
+}
+
+:deep(.el-checkbox-group) {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* 调整既往治疗文字排版 */
+.info-row {
+  line-height: 1.4;
 }
 </style>

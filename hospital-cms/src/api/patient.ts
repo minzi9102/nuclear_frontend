@@ -44,12 +44,14 @@ export const deletePatient = (documentId: string) => {
 
 // 创建患者
 export const createPatient = (data: any) => {
+  const { documentId, treatments, id, ...dataToSubmit } = data
   // Strapi 要求 post 的数据包裹在 { data: ... } 中
-  return request.post('/patients', { data })
+  return request.post('/patients', { data: dataToSubmit })
 }
 
 // 修改患者
 // ⚠️ 注意：同删除，Strapi v5 建议使用 documentId
 export const updatePatient = (documentId: string, data: any) => {
-  return request.put(`/patients/${documentId}`, { data })
+  const { documentId: _, treatments, id, ...dataToSubmit } = data
+  return request.put(`/patients/${documentId}`, { data: dataToSubmit })
 }

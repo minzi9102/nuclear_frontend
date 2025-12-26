@@ -1,4 +1,6 @@
-import { TREATMENT_TARGET_MAP } from '../constants/treatment';
+import { TREATMENT_TARGET_MAP} from '../constants/treatment';
+import type { PastTreatment} from '../constants/treatment';
+
 
 // 通用列表响应结构
 export interface ApiResponse<T> {
@@ -22,6 +24,7 @@ export interface Patient {
   Birthday: string;
   treatmentNo?: string; 
   treatments?: Treatment[];
+  past_treatments: PastTreatment[]; // 存储为 key 数组，如 ['surgery', 'laser']
 }
 
 // 查询参数接口
