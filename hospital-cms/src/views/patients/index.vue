@@ -3,7 +3,8 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { 
   Search, Plus, Edit, Delete, 
   Male, Female, Calendar, Timer, 
-  ArrowRight, FolderOpened 
+  ArrowRight, FolderOpened,
+  Filter, Refresh, Finished // ⬅️ 新增交互图标
 } from '@element-plus/icons-vue' 
 import { getPatientList, deletePatient, createPatient, updatePatient } from '../../api/patient'
 import type { Patient } from '../../api/types'
@@ -24,6 +25,16 @@ const dialogTitle = ref('新建患者')
 const formLoading = ref(false)
 const formRef = ref<FormInstance>()
 
+// 定义高级搜索状态
+const drawerVisible = ref(false)
+
+// 高级搜索表单数据对象
+const advancedSearchForm = reactive({
+  Name: '',
+  Gender: '',
+  birthdayRange: [] as string[], // [开始日期, 结束日期]
+  past_treatments: [] as string[]
+})
 // 表单数据
 const formData = reactive({
   documentId: undefined as string | undefined,
@@ -72,21 +83,55 @@ const formatDate = (dateStr: string) => {
 const fetchData = async () => {
   loading.value = true
   try {
+    const filters: any = {}
+
+    // --- A. 多字段模糊搜索逻辑 ---
+    // 输入一个关键词，同时匹配姓名（或其他你未来想加入的字段，如备注）
+    const searchName = advancedSearchForm.Name || queryParams.keyword
+    
+    if (searchName) {
+      filters.$or = [
+        { Name: { $containsi: searchName } },
+      ]
+    }
+
+    // --- B. 高级搜索条件组合 ---
+    // 1. 性别精确匹配
+    if (advancedSearchForm.Gender) {
+      filters.Gender = { $eq: advancedSearchForm.Gender }
+    }
+
+    // 2. 出生日期范围搜索 ($gte: 大于等于, $lte: 小于等于)
+    if (advancedSearchForm.birthdayRange && advancedSearchForm.birthdayRange.length === 2) {
+      filters.Birthday = {
+        $gte: advancedSearchForm.birthdayRange[0],
+        $lte: advancedSearchForm.birthdayRange[1]
+      }
+    }
+
+    // 3. 既往治疗经历搜索 (针对 JSON 数组字段)
+    if (advancedSearchForm.past_treatments && advancedSearchForm.past_treatments.length > 0) {
+      // 匹配包含数组中任意一个选项的记录
+      filters.past_treatments = {
+        $contains: advancedSearchForm.past_treatments
+      }
+    }
+
     const apiParams = {
       page: queryParams.page,
       pageSize: queryParams.pageSize,
-      ...(queryParams.keyword ? { filters: { Name: { $contains: queryParams.keyword } } } : {}),
-      // 保持 populate 逻辑，确保能获取 treatments
+      filters: filters // 将组合好的高级搜索条件传给 API
     }
 
     const res: any = await getPatientList(apiParams as any)
 
-    if (res.data && Array.isArray(res.data)) {
-        tableData.value = res.data
-        total.value = res.meta?.pagination?.total || 0
-    } else if (res.data && res.data.data) {
+    // 数据解包逻辑 (适配 Strapi v5 响应结构)
+    if (res.data && res.data.data) {
         tableData.value = res.data.data
         total.value = res.data.meta?.pagination?.total || 0
+    } else if (res.data) {
+        tableData.value = res.data
+        total.value = res.meta?.pagination?.total || 0
     }
   } catch (error) {
     console.error('获取列表失败:', error)
@@ -95,6 +140,21 @@ const fetchData = async () => {
   }
 }
 
+// 触发搜索
+const onAdvancedSearch = () => {
+  queryParams.page = 1
+  drawerVisible.value = false
+  fetchData()
+}
+
+// 重置搜索条件
+const onResetSearch = () => {
+  advancedSearchForm.Name = ''
+  advancedSearchForm.Gender = ''
+  advancedSearchForm.birthdayRange = []
+  advancedSearchForm.past_treatments = []
+  onAdvancedSearch()
+}
 const handleSearch = () => {
   queryParams.page = 1
   fetchData()
@@ -198,10 +258,11 @@ watch(() => formData.past_treatments, (newVal, oldVal) => {
     
     <div class="header-actions mb-6">
       <div class="search-box">
+        <el-button size="large" :icon="Filter" @click="drawerVisible = true">高级搜索</el-button>
         <el-input 
           v-model="queryParams.keyword" 
-          placeholder="搜索姓名..." 
-          class="w-full"
+          placeholder="输入关键词进行多字段搜索..." 
+          size="large"
           clearable
           @clear="handleSearch"
           @keyup.enter="handleSearch"
@@ -210,11 +271,91 @@ watch(() => formData.past_treatments, (newVal, oldVal) => {
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
+        
+        <el-button 
+          type="primary" 
+          :icon="Search" 
+          size="large" 
+          @click="handleSearch"
+        >
+          搜索
+        </el-button>
+        
       </div>
-      <el-button type="primary" :icon="Plus" size="large" @click="handleCreate" class="create-btn">
-        新建
+
+      <el-button 
+        type="success" 
+        :icon="Plus" 
+        size="large" 
+        @click="handleCreate" 
+        class="create-btn"
+      >
+        新建患者
       </el-button>
     </div>
+
+    <el-drawer
+      v-model="drawerVisible"
+      title="🔍 高级搜索"
+      size="380px"
+      destroy-on-close
+    >
+      <el-form :model="advancedSearchForm" label-position="top" class="p-2">
+        <el-form-item label="患者姓名">
+          <el-input 
+            v-model="advancedSearchForm.Name" 
+            placeholder="请输入患者姓名（支持模糊搜索）" 
+            size="large"
+            clearable
+          >
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="性别选择">
+          <el-radio-group v-model="advancedSearchForm.Gender" class="w-full">
+            <el-radio-button label="">全部</el-radio-button>
+            <el-radio-button label="male">男</el-radio-button>
+            <el-radio-button label="female">女</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="出生日期区间">
+          <el-date-picker
+            v-model="advancedSearchForm.birthdayRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="起始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+            class="w-full"
+          />
+        </el-form-item>
+
+        <el-form-item label="既往治疗经历 (多选)">
+          <el-select
+            v-model="advancedSearchForm.past_treatments"
+            multiple
+            collapse-tags
+            placeholder="请选择治疗项目"
+            class="w-full"
+          >
+            <el-option
+              v-for="opt in PAST_TREATMENT_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <div class="flex gap-2">
+          <el-button class="flex-1" :icon="Refresh" @click="onResetSearch">重置条件</el-button>
+          <el-button class="flex-1" type="primary" :icon="Finished" @click="onAdvancedSearch">开始搜索</el-button>
+        </div>
+      </template>
+    </el-drawer>
 
     <div v-loading="loading" class="card-grid-container">
       
@@ -410,14 +551,27 @@ watch(() => formData.past_treatments, (newVal, oldVal) => {
   margin: 0 auto;
 }
 
-/* 顶部操作栏 */
+/* 顶部操作栏容器 */
 .header-actions {
   display: flex;
-  gap: 12px;
+  gap: 12px;          /* 搜索组合与新建按钮之间的间距 */
+  align-items: center;
 }
+
+/* 搜索组合容器 */
 .search-box {
-  flex: 1; 
+  flex: 1;            /* 占据剩余空间 */
+  display: flex;
+  gap: 8px;           /* 按钮与输入框之间的内部间距 */
 }
+
+/* 确保输入框在按钮之间自动撑开 */
+.search-box :deep(.el-input) {
+  flex: 1;
+}
+
+/* 确保所有按钮不会因为 Flex 布局被压缩 */
+.search-box .el-button,
 .create-btn {
   flex-shrink: 0;
 }
