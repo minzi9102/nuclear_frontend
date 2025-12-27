@@ -163,6 +163,7 @@ const handlePictureCardPreview = (file: UploadFile) => {
       action="#" 
       list-type="picture-card"
       multiple
+      accept="image/*"
       :http-request="customUploadRequest"
       :on-change="handleChange"
       :on-remove="handleRemove"
