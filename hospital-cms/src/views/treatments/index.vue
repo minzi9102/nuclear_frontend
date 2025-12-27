@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { Search, Refresh, Plus, Delete, Picture } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
+import { Search, Refresh, Plus, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 
 // 组件引入
@@ -11,67 +11,64 @@ import { getTreatmentList, deleteTreatment, createTreatment } from '../../api/tr
 import { getPatientList } from '../../api/patient'
 import type { Treatment, Patient, StrapiMedia } from '../../api/types'
 
-// 💡 引入规范定义的常量
+// 常量引入
 import { TREATMENT_TARGET_MAP, TARGET_OPTIONS } from '../../constants/treatment';
 
-// 1. 定义 Base URL
+// Base URL
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1337'
 
 // --- 列表数据 ---
 const tableData = ref<Treatment[]>([])
 const loading = ref(false)
 const total = ref(0)
-
-// 列表查询参数
 const queryParams = reactive({
   page: 1,
   pageSize: 10,
   treatmentNo: ''
 })
 
-// --- 弹窗与表单数据 ---
+// --- 弹窗与表单 ---
 const dialogVisible = ref(false)
 const formLoading = ref(false)
 const formRef = ref<FormInstance>()
 
-// 💡 使用常量定义的选项
-const targetOptions = TARGET_OPTIONS;
+// 🔥 新增：图片上传组件的引用
+const uploaderRef = ref<InstanceType<typeof ImageUploader> | null>(null)
 
-// 患者搜索相关
+// 选项数据
+const targetOptions = TARGET_OPTIONS;
 const patientLoading = ref(false)
 const patientOptions = ref<Patient[]>([])
 
-// 表单模型
+// 表单模型 (注意：移除了 images，因为现在由 uploadRef 接管)
 const formData = reactive({
   patient: '' as string,
   target: '',
-  sequence_number: undefined as number | undefined,
-  images: [] as StrapiMedia[]
+  sequence_number: undefined as number | undefined
 })
 
-// 表单规则
 const rules = {
   patient: [{ required: true, message: '请选择关联患者', trigger: 'change' }],
   target: [{ required: true, message: '请选择治疗部位', trigger: 'change' }]
 }
 
-// --- 工具：获取完整图片路径 ---
+// --- 工具方法 ---
 const getThumbnailUrl = (img: StrapiMedia) => {
   if (!img || !img.url) return ''
   const url = img.formats?.thumbnail?.url || img.url
   return url.startsWith('http') ? url : `${BASE_URL}${url}`
 }
 
-// --- 方法 ---
+// --- 核心逻辑 ---
 
-// 1. 获取治疗记录列表
+// 1. 获取列表
 const fetchData = async () => {
   loading.value = true
   try {
     const apiParams: any = {
       'pagination[page]': queryParams.page,
       'pagination[pageSize]': queryParams.pageSize,
-      populate: ['patient', 'Images'], // 注意：Strapi 字段名 Images 通常大写
+      populate: ['patient', 'Images'], 
       sort: 'createdAt:desc',
     }
     if (queryParams.treatmentNo) {
@@ -79,7 +76,6 @@ const fetchData = async () => {
     }
 
     const res: any = await getTreatmentList(apiParams)
-    
     if (res.data) {
       tableData.value = res.data.data || res.data || []
       total.value = res.data.meta?.pagination?.total || res.meta?.pagination?.total || 0
@@ -91,7 +87,7 @@ const fetchData = async () => {
   }
 }
 
-// 2. 远程搜索患者
+// 2. 搜索患者
 const searchPatients = async (query: string) => {
   if (query) {
     patientLoading.value = true
@@ -111,14 +107,20 @@ const searchPatients = async (query: string) => {
   }
 }
 
-// 3. 打开新建弹窗
+// 3. 打开弹窗
 const handleCreate = () => {
+  // 重置表单数据
   formData.patient = ''
   formData.target = ''
   formData.sequence_number = undefined
-  formData.images = []
   patientOptions.value = []
+  
+  // 打开弹窗
   dialogVisible.value = true
+  
+  // 注意：由于弹窗设置了 destroy-on-close，
+  // ImageUploader 组件会在每次打开时重新挂载，自动清空内部状态，
+  // 所以不需要手动重置 uploaderRef
 }
 
 // 4. 提交表单
@@ -129,21 +131,36 @@ const handleSubmit = async () => {
     if (valid) {
       formLoading.value = true
       try {
+        let imageIds: number[] = []
+
+        // A. 先处理图片上传
+        if (uploaderRef.value) {
+          imageIds = await uploaderRef.value.submitAll()
+        }
+
+        // B. 构建提交数据
         const submitData = {
           patient: formData.patient,
           target: formData.target,
           sequence_number: formData.sequence_number,
-          Images: formData.images.map(img => img.id)
+          Images: imageIds 
         }
 
-        await createTreatment(submitData)
+        console.log('📡 提交 Payload:', submitData)
+
+        // C. 创建记录
+        // 🔴 修复点：去掉 { data: submitData }，直接传 submitData
+        // 因为你的 createTreatment API 内部会自动加上 { data: ... }
+        await createTreatment(submitData) 
         
         ElMessage.success('创建成功')
         dialogVisible.value = false
-        fetchData()
-      } catch (error) {
+        fetchData() // 刷新列表
+      } catch (error: any) {
         console.error(error)
-        ElMessage.error('创建失败')
+        // 优化错误提示：如果有后端返回的具体信息，就显示具体的
+        const errorMsg = error.response?.data?.error?.message || '创建失败，请检查网络或重试'
+        ElMessage.error(errorMsg)
       } finally {
         formLoading.value = false
       }
@@ -272,8 +289,8 @@ onMounted(() => {
           </el-select>
         </el-form-item>
 
-        <el-form-item label="治疗影像" prop="images">
-          <image-uploader v-model="formData.images" :limit="10" />
+        <el-form-item label="治疗影像">
+          <image-uploader ref="uploaderRef" :limit="10" />
         </el-form-item>
 
         <el-form-item label="手动序号" prop="sequence_number">
