@@ -10,9 +10,11 @@ import { getPatientList, deletePatient, createPatient, updatePatient } from '../
 import type { Patient } from '../../api/types'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 
-// 🔥 1. 引入新组件，移除旧的 TreatmentDetailDialog
+// 组件引用
 import PatientDetailDialog from '../../components/PatientDetailDialog.vue'
+import TreatmentCreateDialog from '../../components/TreatmentCreateDialog.vue'
 
+// 常量引用
 import { PAST_TREATMENT_MAP, PAST_TREATMENT_OPTIONS } from '../../constants/treatment'
 import type { PastTreatment } from '../../constants/treatment'
 
@@ -20,22 +22,27 @@ import type { PastTreatment } from '../../constants/treatment'
 const loading = ref(false)
 const tableData = ref<Patient[]>([])
 const total = ref(0)
-// 🔥 2. 引用名改为 patientDetailRef
-const patientDetailRef = ref()
 
-// ... (此处省略未改动的 弹窗相关、高级搜索、表单数据 定义，保持原样即可) ...
-// ⚠️ 注意：为了保持回答简洁，未改动的中间变量定义我已折叠，请保留你原文件中的代码
+// 组件 Ref
+const patientDetailRef = ref()
+const treatmentCreateRef = ref() // ✨ 新增：新建治疗弹窗引用
+
+// 弹窗控制
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建患者')
 const formLoading = ref(false)
 const formRef = ref<FormInstance>()
 const drawerVisible = ref(false)
+
+// 搜索表单
 const advancedSearchForm = reactive({
   Name: '',
   Gender: '',
   birthdayRange: [] as string[],
   past_treatments: [] as string[]
 })
+
+// 新建/编辑表单
 const formData = reactive({
   documentId: undefined as string | undefined,
   Name: '',
@@ -43,15 +50,18 @@ const formData = reactive({
   Birthday: '',
   past_treatments: ['none'] as PastTreatment[] 
 })
+
 const rules = {
   Name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   Birthday: [{ required: true, message: '请选择出生日期', trigger: 'change' }]
 }
+
 const queryParams = reactive({
   page: 1,
   pageSize: 12, 
   keyword: ''
 })
+
 const isMobile = ref(window.innerWidth <= 768)
 
 // --- 辅助工具函数 ---
@@ -99,11 +109,9 @@ const fetchData = async () => {
       page: queryParams.page,
       pageSize: queryParams.pageSize,
       filters: filters,
-      // 🔥 3. 性能优化：列表页不需要查图片和详情了，只需要知道有几次治疗即可
-      // 如果你的 API 支持 count 最好，不支持的话 populate 也行，但不需要深层 populate images
       populate: {
         treatments: {
-            fields: ['treatmentNo', 'createdAt'] // 只取基础字段，减少流量
+            fields: ['treatmentNo', 'createdAt'] 
         }
       }
     }
@@ -124,35 +132,54 @@ const fetchData = async () => {
   }
 }
 
-// ... (此处省略 搜索、删除、新建、编辑 的逻辑，保持原样即可) ...
+// 搜索与重置
 const onAdvancedSearch = () => { queryParams.page = 1; drawerVisible.value = false; fetchData() }
 const onResetSearch = () => { advancedSearchForm.Name = ''; advancedSearchForm.Gender = ''; advancedSearchForm.birthdayRange = []; advancedSearchForm.past_treatments = []; onAdvancedSearch() }
 const handleSearch = () => { queryParams.page = 1; fetchData() }
 const handleCurrentChange = (val: number) => { queryParams.page = val; fetchData() }
+
+// 删除患者
 const handleDelete = (row: Patient) => {
   if (!row.documentId) return
-  // 阻止冒泡，防止触发卡片点击
   ElMessageBox.confirm(`确定删除患者 "${row.Name}" 吗？`, '警告',{ confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }).then(async () => {
     try {
       await deletePatient(row.documentId!); ElMessage.success('删除成功'); fetchData()
     } catch (error) { ElMessage.error('删除失败') }
   })
 }
+
+// 新建/编辑患者
 const handleCreate = () => { dialogTitle.value = '新建患者'; formData.documentId = undefined; formData.Name = ''; formData.Gender = 'male'; formData.Birthday = ''; formData.past_treatments = ['none']; dialogVisible.value = true }
 const handleEdit = (row: Patient) => {
-    // 阻止冒泡
     dialogTitle.value = '编辑患者'; formData.documentId = row.documentId; formData.Name = row.Name; formData.Gender = row.Gender as string; formData.Birthday = row.Birthday; formData.past_treatments = Array.isArray(row.past_treatments) ? row.past_treatments : []; dialogVisible.value = true
 }
 const handleSubmit = async () => { if (!formRef.value) return; await formRef.value.validate(async (valid) => { if (valid) { formLoading.value = true; try { if (formData.documentId) { await updatePatient(formData.documentId, { ...formData }); ElMessage.success('修改成功') } else { await createPatient({ ...formData }); ElMessage.success('创建成功') } dialogVisible.value = false; fetchData() } catch (error) { ElMessage.error('操作失败') } finally { formLoading.value = false } } }) }
-watch(() => formData.past_treatments, (newVal, oldVal) => { if (newVal.length > 1) { if (newVal.includes('none') && oldVal.includes('none')) { formData.past_treatments = newVal.filter(item => item !== 'none') } else if (newVal.includes('none') && !oldVal.includes('none')) { formData.past_treatments = ['none'] } } if (newVal.length === 0) { formData.past_treatments = ['none'] } }, { deep: true })
-onMounted(() => { fetchData() })
 
-// 🔥 4. 新的点击处理逻辑
+// 监听既往史互斥逻辑
+watch(() => formData.past_treatments, (newVal, oldVal) => { if (newVal.length > 1) { if (newVal.includes('none') && oldVal.includes('none')) { formData.past_treatments = newVal.filter(item => item !== 'none') } else if (newVal.includes('none') && !oldVal.includes('none')) { formData.past_treatments = ['none'] } } if (newVal.length === 0) { formData.past_treatments = ['none'] } }, { deep: true })
+
+// 点击卡片进入详情
 const handleCardClick = (documentId: string) => {
   if (!documentId) return
   patientDetailRef.value?.open(documentId)
 }
 
+// ✨ Step 2 核心：点击卡片上的“新建治疗”按钮
+const handleCreateTreatment = (row: any) => {
+  // 调用子组件的 open 方法，并传入锁定参数
+  treatmentCreateRef.value.open({
+    documentId: row.documentId,
+    Name: row.Name
+  })
+}
+
+// ✨ Step 2 核心：创建成功后的回调
+const onTreatmentCreated = () => {
+  // 刷新列表，更新卡片上的“治疗次数”等信息
+  fetchData() 
+}
+
+onMounted(() => { fetchData() })
 </script>
 
 <template>
@@ -237,9 +264,36 @@ const handleCardClick = (documentId: string) => {
               </div>
             </div>
 
-            <div class="card-footer px-4 py-3 flex justify-end items-center border-t bg-white" @click.stop>
-                <el-button link type="primary" :icon="Edit" @click="handleEdit(patient)">编辑</el-button>
-                <el-button link type="danger" :icon="Delete" @click="handleDelete(patient)">删除</el-button>
+            <div class="card-footer px-4 py-3 border-t bg-white" @click.stop>
+  
+              <div class="action-row flex justify-between items-center mb-3 pb-3 border-b border-dashed border-gray-100">
+                <el-button 
+                  type="primary" 
+                  link 
+                  :icon="Edit" 
+                  @click.stop="handleEdit(patient)"
+                >
+                  编辑档案
+                </el-button>
+                
+                <el-button 
+                  type="danger" 
+                  link 
+                  :icon="Delete" 
+                  @click.stop="handleDelete(patient)"
+                >
+                  删除
+                </el-button>
+              </div>
+              <el-button 
+                class="w-full"
+                type="primary" 
+                :icon="Plus" 
+                round 
+                @click.stop="handleCreateTreatment(patient)" 
+              >
+                新建治疗记录
+              </el-button>
             </div>
 
           </el-card>
@@ -262,6 +316,7 @@ const handleCardClick = (documentId: string) => {
     </el-dialog>
 
     <PatientDetailDialog ref="patientDetailRef" />
+    <TreatmentCreateDialog ref="treatmentCreateRef" @success="onTreatmentCreated" />
   </div>
 </template>
 
