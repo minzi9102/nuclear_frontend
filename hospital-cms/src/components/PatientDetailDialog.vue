@@ -37,7 +37,7 @@
       </div>
 
       <div v-if="patientData.past_treatments?.length" class="history-box">
-        <span class="label">既往病史：</span>
+        <span class="label">既往治疗：</span>
         <span class="value">
             {{ patientData.past_treatments.map((key: string) => (PAST_TREATMENT_MAP as any)[key] || key).join('、') }}
         </span>
@@ -57,8 +57,19 @@
               <div class="collapse-header-content">
                 <div class="header-main">
                   <span class="treatment-no">{{ treatment.treatmentNo }}</span>
-                  <el-tag size="small" effect="plain" class="ml-2">
+                  <el-tag size="large" effect="plain" class="ml-2">
                       {{ (TREATMENT_TARGET_MAP as any)[treatment.target] || treatment.target }}
+                  </el-tag>
+                  <el-tag 
+                    v-if="treatment.duration" 
+                    type="info" 
+                    size="large" 
+                    effect="plain" 
+                    class="ml-2"
+                    style="display: flex; align-items: center; border: 1px solid #f3f4f6;"
+                  >
+                    <el-icon style="margin-right: 4px"><Timer /></el-icon>
+                    {{ treatment.duration }} 小时
                   </el-tag>
                 </div>
                 
@@ -124,7 +135,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
-import { Loading, Male, Female, Picture, Pointer } from '@element-plus/icons-vue'
+import { Loading, Male, Female, Picture, Pointer, Timer } from '@element-plus/icons-vue'
 import { getPatientList } from '../api/patient'
 import { ElMessage } from 'element-plus'
 import { TREATMENT_TARGET_MAP, PAST_TREATMENT_MAP } from '../constants/treatment'
@@ -319,7 +330,7 @@ defineExpose({ open })
 
 /* 🔥 字体加大 */
 .treatment-no { 
-  font-size: 18px; /* 从 15px 改为 18px */
+  font-size: 24px; /* 从 15px 改为 24px */
   font-weight: 700; 
   color: #111827; 
 }
@@ -333,9 +344,17 @@ defineExpose({ open })
 }
 
 .date-text { 
-  font-size: 13px; 
+  font-size: 18px; 
   color: #9ca3af; 
   white-space: nowrap; /* 🔥 防止日期换行 */
+  font-weight: 500; /* 稍微加粗一点点 */
+}
+
+/* 使用 :deep() 穿透 Element Plus 的默认样式 */
+:deep(.header-main .el-tag) {
+  font-size: 15px !important; /* 强制设为 15px */
+  height: 32px; /* 配合 size="large" 确保高度足够 */
+  padding: 0 12px; /* 增加一点左右内边距 */
 }
 
 /* 内容区与图片 */

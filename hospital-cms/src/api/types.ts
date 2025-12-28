@@ -50,6 +50,7 @@ export interface Treatment {
   treatmentNo: string;        // 治疗编号
   target: TreatmentTarget;    // 治疗部位 (已关联强类型)
   sequence_number: number;    // 序号
+  duration?: number; // 使用 ? 设为可选，兼容旧数据
   createdAt: string;
   patient?: Patient;          // 关联的患者信息
   Images?: StrapiMedia[];     // 关联的图片数组 

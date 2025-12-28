@@ -44,7 +44,8 @@ const patientOptions = ref<Patient[]>([])
 const formData = reactive({
   patient: '' as string,
   target: '',
-  sequence_number: undefined as number | undefined
+  sequence_number: undefined as number | undefined,
+  duration: 0, // 给一个默认值，例如 0 小时
 })
 
 const rules = {
@@ -124,6 +125,7 @@ const handleCreate = () => {
 }
 
 // 4. 提交表单
+// 4. 提交表单
 const handleSubmit = async () => {
   if (!formRef.value) return
   
@@ -139,18 +141,18 @@ const handleSubmit = async () => {
         }
 
         // B. 构建提交数据
+        // 🔴 之前的代码漏掉了 duration，导致发给后端的数据里没有时长
         const submitData = {
           patient: formData.patient,
           target: formData.target,
           sequence_number: formData.sequence_number,
+          duration: formData.duration, // ✅ 修复：必须显式把这个字段加进去！
           Images: imageIds 
         }
 
         console.log('📡 提交 Payload:', submitData)
 
         // C. 创建记录
-        // 🔴 修复点：去掉 { data: submitData }，直接传 submitData
-        // 因为你的 createTreatment API 内部会自动加上 { data: ... }
         await createTreatment(submitData) 
         
         ElMessage.success('创建成功')
@@ -158,7 +160,6 @@ const handleSubmit = async () => {
         fetchData() // 刷新列表
       } catch (error: any) {
         console.error(error)
-        // 优化错误提示：如果有后端返回的具体信息，就显示具体的
         const errorMsg = error.response?.data?.error?.message || '创建失败，请检查网络或重试'
         ElMessage.error(errorMsg)
       } finally {
@@ -237,6 +238,15 @@ onMounted(() => {
           </template>
         </el-table-column>
 
+        <el-table-column label="时长" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.duration" type="info" effect="plain">
+              {{ row.duration }} 小时
+            </el-tag>
+            <span v-else class="text-gray-300">-</span>
+          </template>
+        </el-table-column>
+
         <el-table-column prop="createdAt" label="创建时间">
           <template #default="{ row }">
             {{ new Date(row.createdAt).toLocaleString() }}
@@ -287,6 +297,18 @@ onMounted(() => {
               :value="item.value" 
             />
           </el-select>
+        </el-form-item>
+
+        <el-form-item label="治疗时长" prop="duration">
+          <el-input-number 
+            v-model="formData.duration" 
+            :min="0" 
+            :step="5" 
+            controls-position="right"
+            style="width: 100%"
+          >
+            <template #suffix>小时</template>
+          </el-input-number>
         </el-form-item>
 
         <el-form-item label="治疗影像">

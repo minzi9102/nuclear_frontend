@@ -218,7 +218,7 @@ const handleCardClick = (documentId: string) => {
               <div class="info-row text-gray-500 text-xs mb-3 flex items-start gap-2 bg-gray-50 p-2 rounded">
                 <el-icon class="mt-0.5"><FolderOpened /></el-icon>
                 <div class="flex-1">
-                  <span class="font-bold">既往病史: </span>
+                  <span class="font-bold">既往治疗: </span>
                   <span v-if="patient.past_treatments?.length">
                     {{ patient.past_treatments.map((key: string) => (PAST_TREATMENT_MAP as any)[key] || key).join('、') }}
                   </span>
