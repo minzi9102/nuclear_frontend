@@ -15,11 +15,13 @@
     "compressorjs": "^1.2.1",
     "element-plus": "^2.11.9",
     "pinia": "^3.0.4",
+    "qs": "^6.14.0",
     "vue": "^3.5.24",
     "vue-router": "^4.6.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "@types/qs": "^6.14.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",
     "typescript": "~5.9.3",
