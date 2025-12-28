@@ -5,29 +5,38 @@ import type { ApiResponse, Patient, PatientQueryParams } from './types'
 // 获取患者列表 (增强版：包含关联的治疗记录)
 // 获取患者列表 (修复分页报错版)
 export const getPatientList = (params: PatientQueryParams) => {
-  // 1. 解构出 page 和 pageSize，剩下的通常是 filters
   const { page, pageSize, ...restParams } = params
 
-  // 2. 构造符合 Strapi v5 要求的嵌套对象
+  // 1. 定义默认的“轻量级”关联 (只查基础信息，不查图片)
+  // 这是给首页卡片列表用的，防止加载太慢
+  const defaultPopulate = {
+    treatments: {
+      fields: ['treatmentNo', 'target', 'createdAt', 'documentId'],
+      sort: ['createdAt:desc']
+    }
+  }
+
+  // 2. 构造查询对象
   const queryObject = {
-    // 关键修复：分页参数必须放在 pagination 对象里
     pagination: {
       page: page,
       pageSize: pageSize
     },
-    // 展开过滤参数 (例如 filters)
-    ...restParams,
     
-    // 关联查询 (保持之前的逻辑)
-    populate: {
-      treatments: {
-        fields: ['treatmentNo', 'target', 'createdAt', 'documentId'],
-        sort: ['createdAt:desc']
-      }
-    }
+    // 3. 关键修改逻辑：
+    // 如果组件(restParams)里传了 populate，就用组件传的；
+    // 如果没传，就用上面定义的 defaultPopulate。
+    populate: restParams.populate || defaultPopulate,
+
+    // 把剩下的过滤参数 (如 filters) 展开
+    ...restParams,
   }
 
-  // 3. 序列化
+  // 4. 清理：因为 populate 已经被手动处理了，避免 restParams 里重复的 populate 干扰 (虽然 qs 会处理，但这样更干净)
+  if (restParams.populate) {
+      delete (queryObject as any).populate_backup // 这一步其实不用写，上面的逻辑已经涵盖
+  }
+
   const queryString = qs.stringify(queryObject, {
     encodeValuesOnly: true
   })
