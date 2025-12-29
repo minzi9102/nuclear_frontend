@@ -1079,3 +1079,48 @@ Dev Context Snapshot [2025-12-29]
     Tech Stack: Vue 3, TypeScript, Element Plus (Icons: <Timer />).
 
     Dependencies: 依赖 ../constants/treatment 中的 TREATMENT_TARGET_MAP 进行字典映射。
+
+Dev Context Snapshot [2025-12-29]
+1. 核心任务与状态
+
+    当前目标: 重构 views/treatments/index.vue，废弃局部表单逻辑，集成统一的 TreatmentCreateDialog 组件。
+
+    当前状态: ✅ 已完成 (代码已生成并应用)
+
+    关键文件:
+
+        src/views/treatments/index.vue: 全量替换了 <script> 和 <template>，接入了通用创建弹窗。
+
+2. 本次会话变动 (Changelog)
+
+    [重构] 组件复用:
+
+        引入 TreatmentCreateDialog 替代原有的 el-dialog 表单。
+
+        移除了 ImageUploader、createTreatment、getPatientList 等局部引入。
+
+        删除了 formData、rules、patientOptions 等冗余状态。
+
+    [逻辑] 交互流转:
+
+        handleCreate 改为调用 treatmentCreateRef.value?.open() (无参调用，启用非锁定搜索模式)。
+
+        监听 @success 事件触发 fetchData 刷新列表。
+
+    [数据] 字段同步:
+
+        确保了 duration (治疗时长) 字段在新建流程中的传递已被封装在子组件内，外部无需关心 Payload 组装。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 验证在 views/treatments/index.vue 打开弹窗时，"关联患者"搜索框是否正常工作（非锁定状态）。
+
+    TODO: 检查新建记录后，列表页的 "时长" 和 "部位" 字段是否正确渲染。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3 (Composition API), TypeScript, Element Plus
+
+    Dependencies: 依赖 src/components/TreatmentCreateDialog.vue
+
+    Config: 沿用 VITE_API_URL 环境变量。

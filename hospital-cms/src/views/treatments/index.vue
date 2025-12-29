@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { Search, Refresh, Plus, Delete } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 // 组件引入
-import ImageUploader from '../../components/ImageUploader/index.vue'
+import TreatmentCreateDialog from '../../components/TreatmentCreateDialog.vue'
 
 // API 引入
-import { getTreatmentList, deleteTreatment, createTreatment } from '../../api/treatment'
-import { getPatientList } from '../../api/patient'
-import type { Treatment, Patient, StrapiMedia } from '../../api/types'
+import { getTreatmentList, deleteTreatment } from '../../api/treatment'
+import type { Treatment, StrapiMedia } from '../../api/types'
 
 // 常量引入
-import { TREATMENT_TARGET_MAP, TARGET_OPTIONS } from '../../constants/treatment';
+import { TREATMENT_TARGET_MAP } from '../../constants/treatment';
 
 // Base URL
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1337'
@@ -27,31 +26,8 @@ const queryParams = reactive({
   treatmentNo: ''
 })
 
-// --- 弹窗与表单 ---
-const dialogVisible = ref(false)
-const formLoading = ref(false)
-const formRef = ref<FormInstance>()
-
-// 🔥 新增：图片上传组件的引用
-const uploaderRef = ref<InstanceType<typeof ImageUploader> | null>(null)
-
-// 选项数据
-const targetOptions = TARGET_OPTIONS;
-const patientLoading = ref(false)
-const patientOptions = ref<Patient[]>([])
-
-// 表单模型 (注意：移除了 images，因为现在由 uploadRef 接管)
-const formData = reactive({
-  patient: '' as string,
-  target: '',
-  sequence_number: undefined as number | undefined,
-  duration: 0, // 给一个默认值，例如 0 小时
-})
-
-const rules = {
-  patient: [{ required: true, message: '请选择关联患者', trigger: 'change' }],
-  target: [{ required: true, message: '请选择治疗部位', trigger: 'change' }]
-}
+// --- 组件引用 ---
+const treatmentCreateRef = ref<InstanceType<typeof TreatmentCreateDialog> | null>(null)
 
 // --- 工具方法 ---
 const getThumbnailUrl = (img: StrapiMedia) => {
@@ -88,88 +64,13 @@ const fetchData = async () => {
   }
 }
 
-// 2. 搜索患者
-const searchPatients = async (query: string) => {
-  if (query) {
-    patientLoading.value = true
-    try {
-      const res: any = await getPatientList({
-        'filters[Name][$contains]': query,
-        'pagination[limit]': 10
-      } as any)
-      patientOptions.value = res.data?.data || res.data || []
-    } catch (error) {
-      console.error(error)
-    } finally {
-      patientLoading.value = false
-    }
-  } else {
-    patientOptions.value = []
-  }
-}
-
-// 3. 打开弹窗
+// 2. 打开新建弹窗
 const handleCreate = () => {
-  // 重置表单数据
-  formData.patient = ''
-  formData.target = ''
-  formData.sequence_number = undefined
-  patientOptions.value = []
-  
-  // 打开弹窗
-  dialogVisible.value = true
-  
-  // 注意：由于弹窗设置了 destroy-on-close，
-  // ImageUploader 组件会在每次打开时重新挂载，自动清空内部状态，
-  // 所以不需要手动重置 uploaderRef
+  // 直接调用组件的 open 方法，不传参代表"非锁定模式"（可以搜索选择任意患者）
+  treatmentCreateRef.value?.open()
 }
 
-// 4. 提交表单
-// 4. 提交表单
-const handleSubmit = async () => {
-  if (!formRef.value) return
-  
-  await formRef.value.validate(async (valid) => {
-    if (valid) {
-      formLoading.value = true
-      try {
-        let imageIds: number[] = []
-
-        // A. 先处理图片上传
-        if (uploaderRef.value) {
-          imageIds = await uploaderRef.value.submitAll()
-        }
-
-        // B. 构建提交数据
-        // 🔴 之前的代码漏掉了 duration，导致发给后端的数据里没有时长
-        const submitData = {
-          patient: formData.patient,
-          target: formData.target,
-          sequence_number: formData.sequence_number,
-          duration: formData.duration, // ✅ 修复：必须显式把这个字段加进去！
-          Images: imageIds 
-        }
-
-        console.log('📡 提交 Payload:', submitData)
-
-        // C. 创建记录
-        await createTreatment(submitData) 
-        
-        ElMessage.success('创建成功')
-        dialogVisible.value = false
-        fetchData() // 刷新列表
-      } catch (error: any) {
-        console.error(error)
-        const errorMsg = error.response?.data?.error?.message || '创建失败，请检查网络或重试'
-        ElMessage.error(errorMsg)
-      } finally {
-        formLoading.value = false
-      }
-    }
-  })
-}
-
-// 5. 删除
+// 3. 删除
 const handleDelete = (row: Treatment) => {
   ElMessageBox.confirm('确定删除吗?', '警告', { type: 'warning' })
     .then(async () => {
@@ -192,7 +93,14 @@ onMounted(() => {
     <el-card shadow="never">
       <div class="filter-container">
         <div class="left">
-          <el-input v-model="queryParams.treatmentNo" placeholder="搜索治疗编号..." class="search-input" clearable @clear="handleSearch" @keyup.enter="handleSearch">
+          <el-input 
+            v-model="queryParams.treatmentNo" 
+            placeholder="搜索治疗编号..." 
+            class="search-input" 
+            clearable 
+            @clear="handleSearch" 
+            @keyup.enter="handleSearch"
+          >
             <template #append><el-button :icon="Search" @click="handleSearch" /></template>
           </el-input>
         </div>
@@ -261,73 +169,20 @@ onMounted(() => {
       </el-table>
 
       <div class="pagination-container">
-        <el-pagination v-model:current-page="queryParams.page" v-model:page-size="queryParams.pageSize" :total="total" layout="total, prev, pager, next" @current-change="handleCurrentChange" />
+        <el-pagination 
+          v-model:current-page="queryParams.page" 
+          v-model:page-size="queryParams.pageSize" 
+          :total="total" 
+          layout="total, prev, pager, next" 
+          @current-change="handleCurrentChange" 
+        />
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="新建治疗记录" width="600px" :close-on-click-modal="false" destroy-on-close>
-      <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
-        
-        <el-form-item label="选择患者" prop="patient">
-          <el-select
-            v-model="formData.patient"
-            filterable
-            remote
-            reserve-keyword
-            placeholder="请输入患者姓名搜索"
-            :remote-method="searchPatients"
-            :loading="patientLoading"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="item in patientOptions"
-              :key="item.id"
-              :label="`${item.Name} (${item.Gender === 'male' ? '男' : '女'})`"
-              :value="item.documentId"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item label="治疗部位" prop="target">
-          <el-select v-model="formData.target" placeholder="请选择" style="width: 100%">
-            <el-option 
-              v-for="item in targetOptions" 
-              :key="item.value" 
-              :label="item.label" 
-              :value="item.value" 
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item label="治疗时长" prop="duration">
-          <el-input-number 
-            v-model="formData.duration" 
-            :min="0" 
-            :step="5" 
-            controls-position="right"
-            style="width: 100%"
-          >
-            <template #suffix>小时</template>
-          </el-input-number>
-        </el-form-item>
-
-        <el-form-item label="治疗影像">
-          <image-uploader ref="uploaderRef" :limit="10" />
-        </el-form-item>
-
-        <el-form-item label="手动序号" prop="sequence_number">
-          <el-input-number v-model="formData.sequence_number" :min="1" placeholder="留空自动生成" style="width: 100%" />
-          <div style="font-size: 12px; color: #999; margin-top: 5px; line-height: 1.2;">
-            通常无需填写。
-          </div>
-        </el-form-item>
-
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="formLoading" @click="handleSubmit">确定创建</el-button>
-      </template>
-    </el-dialog>
+    <treatment-create-dialog 
+      ref="treatmentCreateRef" 
+      @success="fetchData" 
+    />
   </div>
 </template>
 
