@@ -1202,3 +1202,48 @@ Dev Context Snapshot [2025-12-29]
     Assets: 依赖 src/assets/logo.png (或 jpg/svg)
 
     Storage: 依赖 localStorage 中的 user 键 (Strapi 登录响应格式)
+
+Dev Context Snapshot [2025-12-29 21:18]
+1. 核心任务与状态
+
+    当前目标: 对 views/patients/index.vue 进行组件化拆分与逻辑解耦，修复拆分后的样式丢失与弹窗定位问题。
+
+    当前状态: ✅ 已完成拆分与样式修复，待运行时验证。
+
+    关键文件:
+
+        src/views/patients/index.vue: [重构] 降级为容器组件，仅负责组装 UI 和调用 Hooks。
+
+        src/views/patients/composables/usePatientList.ts: [新增] 抽离数据获取、分页、过滤、删除逻辑。
+
+        src/views/patients/components/PatientCard.vue: [新增] 患者卡片纯展示组件，已补全 scoped 样式。
+
+        src/views/patients/components/PatientSearch.vue: [新增] 搜索栏与高级搜索抽屉组件，已补全 scoped 样式。
+
+        src/views/patients/components/PatientFormDialog.vue: [新增] 新建/编辑弹窗组件，已修正 top 属性。
+
+2. 本次会话变动 (Changelog)
+
+    [重构] 将 God Component index.vue 拆分为 3 个子组件 + 1 个逻辑 Composable。
+
+    [修复] 解决了拆分后子组件样式丢失（"裸奔"）的问题，手动回填了对应的 CSS。
+
+    [优化] PatientFormDialog.vue: <el-dialog> 增加 top="5vh" 属性，解决弹窗在小屏设备位置过低的问题。
+
+    [Style] PatientCard.vue: 补全了 .patient-card, .text-lg 等核心样式。
+
+    [Style] PatientSearch.vue: 补全了移动端 @media (max-width: 768px) 适配样式。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 在浏览器中运行，验证拆分后的组件交互（新建、搜索、详情跳转）是否正常。
+
+    TODO: (可选) 提取重复 CSS 类（如 .flex, .text-gray-500）至 src/styles/utils.css 并全局引入，消除组件间的样式冗余。
+
+    RISK: 需确认 usePatientList.ts 中的 getPatientList API 调用路径是否正确引入。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3 (Composition API), TypeScript, Element Plus
+
+    Config: 依赖 src/constants/treatment.ts (既往治疗映射表) 和 src/api/patient.ts (API 封装)。
