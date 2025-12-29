@@ -24,7 +24,7 @@
             round
             size="default"
           >
-            新建治疗记录
+            新建记录
           </el-button>
           
           <el-button 
@@ -226,7 +226,7 @@ defineExpose({ open })
     justify-content: space-between; 
     width: 100%;
 }
-.header-title { font-size: 18px; font-weight: bold; color: #303133; }
+.header-title { font-size: 16px; font-weight: bold; color: #303133; }
 
 /* Header 右侧操作区 */
 .header-actions {

@@ -188,7 +188,7 @@ onMounted(() => { fetchData() })
     <div class="header-actions mb-6">
       <div class="search-box">
         <el-button size="large" :icon="Filter" @click="drawerVisible = true">高级搜索</el-button>
-        <el-input v-model="queryParams.keyword" placeholder="输入关键词进行多字段搜索..." size="large" clearable @clear="handleSearch" @keyup.enter="handleSearch">
+        <el-input v-model="queryParams.keyword" placeholder="输入患者姓名进行搜索..." size="large" clearable @clear="handleSearch" @keyup.enter="handleSearch">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
         <el-button type="primary" :icon="Search" size="large" @click="handleSearch">搜索</el-button>
