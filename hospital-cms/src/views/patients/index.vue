@@ -304,7 +304,7 @@ onMounted(() => { fetchData() })
       <el-pagination v-model:current-page="queryParams.page" v-model:page-size="queryParams.pageSize" :total="total" layout="prev, pager, next" background :pager-count="5" @current-change="handleCurrentChange" />
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="90%" style="max-width: 500px;" :close-on-click-modal="false" append-to-body>
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="90%" style="max-width: 500px;" :close-on-click-modal="true" append-to-body>
         <el-form ref="formRef" :model="formData" :rules="rules" label-width="70px" label-position="top">
             <el-form-item label="姓名" prop="Name"><el-input v-model="formData.Name" size="large" /></el-form-item>
             <el-form-item label="性别" prop="Gender"><el-radio-group v-model="formData.Gender" size="large" class="w-full"><el-radio-button label="male" class="w-1/2">男</el-radio-button><el-radio-button label="female" class="w-1/2">女</el-radio-button></el-radio-group></el-form-item>

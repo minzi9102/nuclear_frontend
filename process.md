@@ -993,3 +993,48 @@ Dev Context Snapshot [2025-12-29]
     Tech Stack: Vue 3, TypeScript, Element Plus (Icons: @element-plus/icons-vue)
 
     Config: 依赖 MoreFilled 图标组件。
+
+Dev Context Snapshot [2025-12-29]
+1. 核心任务与状态
+
+    当前目标: 优化 TreatmentCreateDialog 组件的移动端适配、弹窗定位及表单默认值逻辑。
+
+    当前状态: 已完成 (代码已生成，待应用)。
+
+    关键文件:
+
+        src/components/TreatmentCreateDialog.vue: 全量重构 template (布局/属性) 与 script (响应式逻辑/默认值)。
+
+2. 本次会话变动 (Changelog)
+
+    [重构] 响应式布局:
+
+        引入 window.innerWidth 监听，计算 isMobile (<768px)。
+
+        el-form: 移动端 label-position 设为 top，PC 端设为 right。
+
+        el-col: 字段布局调整为 :xs="24" :sm="12" (手机端强制换行)。
+
+    [优化] 弹窗体验 (UI/UX):
+
+        el-dialog: 宽度调整为 :width="isMobile ? '90%' : '600px'"。
+
+        el-dialog: 顶部距离调整为 :top="isMobile ? '4vh' : '5vh'" (解决 PC/Mobile 弹窗位置过低问题)。
+
+        CSS: 放弃了 overflow-y: auto 的内部滚动方案，回归 Element Plus 默认页面滚动逻辑。
+
+    [修改] 表单默认值:
+
+        target: 默认值由 'face' 改为 '' (强制用户选择)。
+
+        duration: 默认值设为 1，步长 1，精度 0 (仅允许整数)。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    NOTE: 用户明确决定删除用于强制内部滚动的全局 <style> 块，保留 scoped 样式。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3 (Composition API), TypeScript, Element Plus.
+
+    Utils: 使用原生 window.addEventListener('resize') 实现响应式判断，未引入 @vueuse/core。

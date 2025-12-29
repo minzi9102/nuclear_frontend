@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, reactive, nextTick } from 'vue'
+import { ref, reactive, nextTick, computed } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
+import { useWindowSize } from '@vueuse/core'
 
 // 组件引入
 import ImageUploader from '../components/ImageUploader/index.vue'
@@ -35,6 +36,11 @@ const patientOptions = ref<Patient[]>([])
 // 锁定状态：如果从病人详情页打开，则锁定病人选择
 const isPatientLocked = ref(false)
 
+// --- 响应式布局逻辑 ---
+// 如果没有 @vueuse/core，我们可以简单地用 computed 判断 width
+const width = ref(window.innerWidth)
+const isMobile = computed(() => width.value < 768)
+
 // 表单模型
 const formData = reactive({
   patient: '' as string, // 存储 documentId
@@ -59,9 +65,9 @@ const open = (patient?: { documentId: string; Name: string }) => {
   // 1. 重置表单
   formData.patient = ''
   formData.patientName = ''
-  formData.target = 'face' // 给个默认部位，减少点击
+  formData.target = '' 
   formData.sequence_number = undefined
-  formData.duration = 0.5
+  formData.duration = 48
   patientOptions.value = []
   
   // 2. 判断是否有预设病人 (优先使用 open 参数，其次使用 props)
@@ -148,6 +154,16 @@ const handleSubmit = async () => {
   })
 }
 
+// 窗口大小监听 (简单的防抖监听)
+window.addEventListener('resize', () => {
+  width.value = window.innerWidth
+})
+
+// 动态计算弹窗宽度
+const dialogWidth = computed(() => {
+  return isMobile.value ? '90%' : '600px'
+})
+
 // 暴露 open 方法给父组件
 defineExpose({ open })
 </script>
@@ -156,12 +172,20 @@ defineExpose({ open })
   <el-dialog 
     v-model="visible" 
     title="新建治疗记录" 
-    width="600px" 
+    :width="dialogWidth" 
+    :top="isMobile ? '4vh' : '5vh'"
+    class="mobile-dialog"
     :close-on-click-modal="false" 
     destroy-on-close
     append-to-body
   >
-    <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px" label-position="right">
+    <el-form 
+      ref="formRef" 
+      :model="formData" 
+      :rules="rules" 
+      :label-width="isMobile ? 'auto' : '100px'"
+      :label-position="isMobile ? 'top' : 'right'"
+    >
       
       <el-form-item label="关联患者" prop="patient">
         <el-input 
@@ -196,9 +220,9 @@ defineExpose({ open })
       </el-form-item>
 
       <el-row :gutter="20">
-        <el-col :span="12">
+        <el-col :xs="24" :sm="12">
           <el-form-item label="治疗部位" prop="target">
-            <el-select v-model="formData.target" placeholder="请选择" style="width: 100%">
+            <el-select v-model="formData.target" placeholder="请选择治疗部位" style="width: 100%">
               <el-option 
                 v-for="item in targetOptions" 
                 :key="item.value" 
@@ -208,12 +232,14 @@ defineExpose({ open })
             </el-select>
           </el-form-item>
         </el-col>
-        <el-col :span="12">
+
+        <el-col :xs="24" :sm="12">
           <el-form-item label="治疗时长" prop="duration">
             <el-input-number 
               v-model="formData.duration" 
-              :min="0" 
-              :step="0.5" 
+              :min="1" 
+              :step="1" 
+              :precision="0"
               controls-position="right"
               style="width: 100%"
             >
@@ -240,8 +266,10 @@ defineExpose({ open })
     </el-form>
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="formLoading" @click="handleSubmit">确定创建</el-button>
+      <div class="dialog-footer">
+        <el-button @click="visible = false">取消</el-button>
+        <el-button type="primary" :loading="formLoading" @click="handleSubmit">确定创建</el-button>
+      </div>
     </template>
   </el-dialog>
 </template>
@@ -253,8 +281,28 @@ defineExpose({ open })
   margin-top: 4px; 
   line-height: 1.4;
 }
-:deep(.el-input.is-disabled .el-input__inner) {
-  color: #606266; /* 让禁用的名字颜色深一点，更易读 */
-  font-weight: 500;
+
+/* 移动端按钮布局优化 */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media screen and (max-width: 768px) {
+  /* 手机端让底部按钮撑满，更方便点击 */
+  .dialog-footer {
+    justify-content: stretch;
+  }
+  .dialog-footer button {
+    flex: 1;
+  }
+  
+  /* 调整 el-input-number 在手机上的显示，防止文字被切断 */
+  :deep(.el-input-number .el-input__inner) {
+    text-align: center;
+    padding-left: 10px;
+    padding-right: 40px; /* 给右侧按钮留空间 */
+  }
 }
 </style>
+
