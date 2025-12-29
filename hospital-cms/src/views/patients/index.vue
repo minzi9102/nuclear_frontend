@@ -7,7 +7,8 @@ import PatientCard from './components/PatientCard.vue'
 import PatientFormDialog from './components/PatientFormDialog.vue'
 
 // 2. 引入原有的业务组件
-import PatientDetailDialog from '../../components/PatientDetailDialog.vue'
+// import PatientDetailDialog from '../../components/PatientDetailDialog.vue'
+import PatientDetailDialog from '../../components/PatientDetailDialog/index.vue'
 import TreatmentCreateDialog from '../../components/TreatmentCreateDialog.vue'
 
 // 3. 引入抽离的逻辑 Hooks
@@ -39,6 +40,23 @@ const openEdit = (row: any) => formDialogRef.value?.open(row)
 const openDetail = (id: string) => patientDetailRef.value?.open(id)
 const openCreateTreatment = (row: any) => {
   treatmentCreateRef.value?.open({ documentId: row.documentId, Name: row.Name })
+}
+
+const handleTreatmentSuccess = () => {
+  // 1. 重置页码到第1页 (因为后端更新了 updatedAt，该病人此时一定在第1页)
+  queryParams.page = 1
+  
+  // 2. 刷新数据
+  fetchData()
+
+  // 3. 滚动到页面顶部，让用户立即看到刚才操作的病人
+  const scrollContainer = document.querySelector('.el-main')
+
+  if (scrollContainer) {
+    scrollContainer.scrollTo({ top: 0, behavior: 'smooth' })
+  } else {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 }
 
 onMounted(() => { fetchData() })
@@ -88,7 +106,7 @@ onMounted(() => { fetchData() })
 
     <PatientFormDialog ref="formDialogRef" @success="fetchData" />
     <PatientDetailDialog ref="patientDetailRef" />
-    <TreatmentCreateDialog ref="treatmentCreateRef" @success="fetchData" />
+    <TreatmentCreateDialog ref="treatmentCreateRef" @success="handleTreatmentSuccess" />
   </div>
 </template>
 

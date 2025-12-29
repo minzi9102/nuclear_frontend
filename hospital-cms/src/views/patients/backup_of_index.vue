@@ -11,7 +11,7 @@ import type { Patient } from '../../api/types'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 
 // 组件引用
-import PatientDetailDialog from '../../components/PatientDetailDialog.vue'
+import PatientDetailDialog from '../../components/PatientDetailDialog/backup_PatientDetailDialog.vue'
 import TreatmentCreateDialog from '../../components/TreatmentCreateDialog.vue'
 
 // 常量引用

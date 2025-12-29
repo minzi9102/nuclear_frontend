@@ -1247,3 +1247,58 @@ Dev Context Snapshot [2025-12-29 21:18]
     Tech Stack: Vue 3 (Composition API), TypeScript, Element Plus
 
     Config: 依赖 src/constants/treatment.ts (既往治疗映射表) 和 src/api/patient.ts (API 封装)。
+
+Dev Context Snapshot [2025/12/30 00:05]
+1. 核心任务与状态
+
+    当前目标: 重构 PatientDetailDialog 组件以降低耦合度，并优化治疗记录展开时的自动滚动体验。
+
+    当前状态: 代码已拆分 / 待验证
+
+    关键文件:
+
+        src/components/PatientDetailDialog/: [新建] 组件目录，包含 index.vue, PatientInfo.vue, TreatmentList.vue, TreatmentImages.vue。
+
+        src/components/PatientDetailDialog.vue: [待删除] 旧的单体组件。
+
+        src/views/patients/index.vue: [修改] 需更新对详情弹窗的引用路径。
+
+        后端项目文件：src/api/treatment/content-types/treatment/lifecycles.js: [后端] 实现了创建治疗记录时强制更新患者 updatedAt 的逻辑。
+
+2. 本次会话变动 (Changelog)
+
+    [重构] 组件拆分:
+
+        TreatmentImages.vue: 封装图片轮播与手势滑动 (Touch Events) 逻辑。
+
+        PatientInfo.vue: 纯展示患者头部信息。
+
+        TreatmentList.vue: 封装折叠面板 (el-collapse) 及自动滚动逻辑。
+
+        index.vue: 作为容器，仅负责 API 调用和子组件组装。
+
+    [新增] 自动滚动 (Auto-scroll):
+
+        在 TreatmentList.vue 中实现了 handleCollapseChange。
+
+        逻辑：getBoundingClientRect 计算位移 + offset (60px) 修正 + scrollIntoView 平滑滚动。
+
+        优化：引入 lastActiveNames 对比，修复了“关闭面板时误触滚动”的 Bug。
+
+    [修复] 底部滚动死角: 增加 .bottom-spacer (height: 40vh)，解决最后几条记录展开后无法滚动至顶部的问题。
+
+    [后端] 排序逻辑: 通过 lifecycles.js 确保新建治疗记录后，患者列表按 updatedAt 自动置顶。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 务必删除旧文件 src/components/PatientDetailDialog.vue 以免混淆。
+
+    TODO: 检查 src/views/patients/index.vue 中的引用路径是否已更新为 ../../components/PatientDetailDialog/index.vue (或依靠目录索引)。
+
+    RISK: 拆分后的子组件 Props 类型定义需确保与父组件传递的数据结构 (any) 兼容，防止 TS 报错。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3, TypeScript, Element Plus, Strapi v5.
+
+    Config: 依赖环境变量 VITE_API_URL 用于图片路径拼接。

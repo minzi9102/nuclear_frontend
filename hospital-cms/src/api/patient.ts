@@ -23,12 +23,14 @@ export const getPatientList = (params: PatientQueryParams) => {
       pageSize: pageSize
     },
     
-    // 3. 关键修改逻辑：
-    // 如果组件(restParams)里传了 populate，就用组件传的；
-    // 如果没传，就用上面定义的 defaultPopulate。
+    // ✅ 核心修改：新增主列表排序逻辑
+    // 逻辑：如果组件没有指定排序，默认按 'updatedAt:desc' (最近更新/活跃的在最前)
+    sort: restParams.sort || ['updatedAt:desc'],
+
+    // 填充关联策略
     populate: restParams.populate || defaultPopulate,
 
-    // 把剩下的过滤参数 (如 filters) 展开
+    // 展开剩余参数 (filters 等)
     ...restParams,
   }
 

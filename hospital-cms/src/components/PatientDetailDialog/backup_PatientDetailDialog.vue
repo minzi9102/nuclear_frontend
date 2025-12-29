@@ -74,13 +74,13 @@
       <div class="timeline-divider">治疗记录</div>
 
       <div class="timeline-list">
-        <el-collapse v-model="activeNames" class="custom-collapse">
+        <el-collapse v-model="activeNames" class="custom-collapse" @change="handleCollapseChange">
           <el-collapse-item 
             v-for="(treatment, index) in patientData.treatments" 
             :key="treatment.documentId || index" 
             :name="index"
             class="custom-collapse-item"
-          >
+            :ref="(el: any) => setCollapseItemRef(el, Number(index))">
             <template #title>
               <div class="collapse-header-wrapper">
                 
@@ -134,7 +134,7 @@
 
       <el-empty v-if="!patientData.treatments?.length" description="暂无治疗记录" />
       
-      <div style="height: 20px;"></div>
+      <div class="bottom-spacer"></div>
     </div>
 
     <TreatmentCreateDialog ref="treatmentCreateRef" @success="onTreatmentCreated" />
@@ -142,12 +142,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { Loading, Male, Female, Picture, Pointer, Timer, Close, Plus } from '@element-plus/icons-vue'
-import { getPatientList } from '../api/patient'
+import { getPatientList } from '../../api/patient'
 import { ElMessage } from 'element-plus'
-import { TREATMENT_TARGET_MAP, PAST_TREATMENT_MAP } from '../constants/treatment'
-import TreatmentCreateDialog from './TreatmentCreateDialog.vue'
+import { TREATMENT_TARGET_MAP, PAST_TREATMENT_MAP } from '../../constants/treatment'
+import TreatmentCreateDialog from '../TreatmentCreateDialog.vue'
 
 const visible = ref(false)
 const loading = ref(false)
@@ -156,6 +156,8 @@ const activeNames = ref<number[]>([0])
 const treatmentCreateRef = ref()
 const carouselRefs = ref<Record<number, any>>({})
 const currentDocumentId = ref('')
+const collapseItemRefs = ref<Record<number, any>>({}) // ✅ 新增：存储折叠项 DOM
+const lastActiveNames = ref<number[]>([0]) // 用于记录上一次的折叠状态
 
 // 辅助逻辑
 const setCarouselRef = (el: any, index: number | string) => { if (el) carouselRefs.value[Number(index)] = el }
@@ -166,6 +168,63 @@ let touchStartX = 0
 let touchStartY = 0
 const onTouchStart = (e: TouchEvent) => { if (e.touches && e.touches.length > 0) { touchStartX = e.touches[0]!.clientX; touchStartY = e.touches[0]!.clientY } }
 const onTouchEnd = (e: TouchEvent, index: number | string) => { if (!e.changedTouches || e.changedTouches.length === 0) return; const diffX = touchStartX - e.changedTouches[0]!.clientX; const diffY = touchStartY - e.changedTouches[0]!.clientY; if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) { const target = carouselRefs.value[Number(index)]; target && (diffX > 0 ? target.next() : target.prev()) } }
+
+// ✅ 新增：设置折叠项 Ref
+const setCollapseItemRef = (el: any, index: number) => {
+  if (el) collapseItemRefs.value[index] = el
+}
+
+// ✅ 新增：处理折叠面板切换事件
+const handleCollapseChange = async (val: any) => {
+  const currentNames = Array.isArray(val) ? val : [val]
+  const prevNames = lastActiveNames.value
+
+  // 1. 找出“新展开”的那一项 (在 current 中存在，但在 prev 中不存在的)
+  const newlyOpened = currentNames.find((id: number) => !prevNames.includes(id))
+
+  // 2. 更新历史状态，供下次对比使用
+  lastActiveNames.value = [...currentNames]
+
+  // 3. 只有当确实有新项被展开时，才滚动
+  if (newlyOpened !== undefined && collapseItemRefs.value[newlyOpened]) {
+    await nextTick()
+    
+    // 延迟一点点，配合动画
+    setTimeout(() => {
+      const targetComponent = collapseItemRefs.value[newlyOpened]
+      const targetEl = targetComponent?.$el || targetComponent
+
+      if (targetEl) {
+        // --- 核心修改开始 ---
+        
+        // 1. 找到滚动的父容器 (el-dialog__body)
+        // 使用 closest 方法向上查找最近的滚动容器
+        const scrollContainer = targetEl.closest('.el-dialog__body')
+
+        if (scrollContainer) {
+          // 2. 计算目标元素相对于视口的位置
+          const elementRect = targetEl.getBoundingClientRect()
+          const containerRect = scrollContainer.getBoundingClientRect()
+
+          // 3. 计算当前容器已滚动的距离
+          const currentScrollTop = scrollContainer.scrollTop
+
+          // 4. 计算目标滚动位置
+          // 公式：当前滚动高度 + (元素视口坐标 - 容器视口坐标) - 偏移量(60px)
+          const offset = 60 // 🔥 这里调整你想多滑的距离，比如 60 或 80
+          const targetTop = currentScrollTop + (elementRect.top - containerRect.top) - offset
+
+          // 5. 执行平滑滚动
+          scrollContainer.scrollTo({
+            top: targetTop,
+            behavior: 'smooth'
+          })
+        }
+        // --- 核心修改结束 ---
+      }
+    }, 200)
+  }
+}
 
 // --- 交互逻辑 ---
 const openCreateDialog = () => {
@@ -184,6 +243,7 @@ const open = async (documentId: string) => {
   loading.value = true
   patientData.value = null
   activeNames.value = [0]
+  lastActiveNames.value = [0] 
   carouselRefs.value = {}
   currentDocumentId.value = documentId
 
@@ -361,5 +421,10 @@ defineExpose({ open })
   overflow-y: auto;
   padding-top: 10px !important;
   flex: 1; /* 让 Body 占据剩余空间 */
+}
+.bottom-spacer {
+  height: 40vh; /* 这里的关键：给底部留出巨大的空间 */
+  width: 100%;
+  flex-shrink: 0;
 }
 </style>
