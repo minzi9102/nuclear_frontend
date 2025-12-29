@@ -35,199 +35,6 @@ npm install element-plus axios pinia vue-router
 *   **请求拦截器**：自动从 `localStorage` 读取 JWT Token 并加入 Header (`Authorization: Bearer <token>`)。
 *   **响应拦截器**：全局处理错误，特别是 `401 Unauthorized` 状态下自动清除缓存并跳转回登录页。
 
-## 2. 🐛 遇到的问题与解决方案 (Troubleshooting)
-
-在配置过程中遇到了 3 个主要错误，均已解决。
-
-### 🔴 问题一：找不到路由模块
-
-报错信息：
-```
-找不到模块“../router”或其相应的类型声明。ts(2307)
-```
-原因分析：utils文件夹放错了位置，导致相对路径引用错误。
-
-✅ 解决方案： 将utils文件夹放在src文件夹下，而不是与src同级
-
-### 🔴 问题二：Axios 类型导入错误
-
-报错信息：
-```
-“AxiosInstance”是一种类型，必须在启用 "verbatimModuleSyntax" 时使用仅类型导入进行导入。ts(1484)
-```
-原因分析： Vite 默认开启了 `verbatimModuleSyntax` 规则。TypeScript 要求在导入“纯类型”（在编译后会被删除的代码）时，必须使用 `import type` 语法，而 axios 是实体对象，不能混在一起导入。
-
-✅ 解决方案： 将导入语句拆分为“实体导入”和“类型导入”：
-```typescript
-// 修改前
-import axios, { AxiosInstance, ... } from 'axios'
-
-// 修改后
-import axios from 'axios' // 导入功能
-import type { AxiosInstance, AxiosError, ... } from 'axios' // 导入类型定义
-```
-
-### 🔴 问题三：无法启动项目 (ENOENT)
-
-报错信息：
-```
-npm error code ENOENT Could not read package.json
-```
-原因分析： 在执行 `npm run dev` 时，当前所在的目录是项目的父级文件夹，而不是项目文件夹本身。npm 找不到 `package.json` 配置文件。
-
-✅ 解决方案： 进入项目文件夹后再运行命令：
-```bash
-# 查看当前目录下的文件夹
-dir
-
-# 进入项目文件夹
-cd hospital-cms
-
-# 再次安装依赖（保险起见）并启动
-npm install
-npm run dev
-```
-
-## 3. 🎉 阶段成果
-
-*   ✅ Node.js 环境验证通过。
-*   ✅ Vue 3 项目骨架搭建完成。
-*   ✅ 核心依赖库安装完毕。
-*   ✅ Axios 网络请求层封装完毕（含 Token 拦截逻辑）。
-*   ✅ 项目成功启动在 `http://localhost:5173`。
-
-## 4. 验证该阶段成果是否达成预期目标
-
-验证 Phase 1（环境与基础）是否成功的最佳方式，是进行一次**“冒烟测试” (Smoke Test)**。
-
-我们需要验证三件事：
-
-*   Element Plus 样式是否加载成功？
-*   Axios 能否发请求？
-*   拦截器 是否真的把 Token 塞进了请求头？
-
-请按照以下步骤，修改 `src/App.vue` 文件进行临时测试。
-
-🧪 第一步：编写测试代码
-
-请打开 `src/App.vue`，完全清空里面的内容，粘贴以下代码。
-
-这段代码做了两件事：
-
-*   放了一个 Element Plus 的按钮（测试 UI）。
-*   在页面加载时，手动存入一个假 Token，并尝试发一个请求（测试 Axios）。
-
-代码段
-
-```vue
-<script setup lang="ts">
-import { onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import request from './utils/request' // 引入我们封装的 axios
-
-onMounted(async () => {
-  // 1. 模拟登录：手动往 localStorage 存一个假的 token
-  localStorage.setItem('jwt', 'test-fake-token-123456')
-  console.log('✅ 已存入测试 Token')
-
-  try {
-    // 2. 发起一个请求 (请求 Strapi 的默认公开接口，或者故意请求一个不存在的接口)
-    // 这里我们请求 /users/me，通常这需要权限，正好测试 401/403 拦截器
-    // 或者请求一个不存在的地址测试 404
-    const res = await request.get('/users/me')
-    console.log('请求成功:', res)
-  } catch (error) {
-    console.log('❌ 请求被拦截器捕获 (这是预期的):', error)
-  }
-})
-</script>
-
-<template>
-  <div style="padding: 50px; text-align: center;">
-    <h1>Phase 1 验证页面</h1>
-    <el-button type="primary" size="large">
-      如果你看到我是蓝色的，说明 Element Plus 配置成功
-    </el-button>
-  </div>
-</template>
-
-<style>
-/* 简单的居中样式 */
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-</style>
-```
-
-🔍 第二步：在浏览器中验证
-
-*   确保终端里 `npm run dev` 正在运行。
-*   打开浏览器访问 `http://localhost:5173`。
-*   按 `F12` 打开开发者工具 (`DevTools`)。
-
-✅ 验证点 1：UI 库是否生效
-
-*   看页面：你是否看到了一个蓝色的、圆角的大按钮？
-*   判断：如果按钮是蓝色的，说明 Element Plus 样式引入成功。如果只是普通的灰色直角按钮，说明 `main.ts` 里的样式引入有问题。
-
-✅ 验证点 2：请求拦截器 (Token 注入)
-
-这是最关键的一步。
-
-*   在开发者工具中，切换到 `Network (网络)` 标签页。
-*   刷新页面。
-*   在 `Network` 列表中找到名为 `me` (或者你请求的路径) 的红色请求。
-*   点击这个请求，在右侧查看 `Headers (标头) -> Request Headers (请求标头)`。
-*   检查：你能找到一个叫 `Authorization` 的字段吗？它的值是 `Bearer test-fake-token-123456` 吗？
-    *   成功：说明你的 `request.ts` 里的请求拦截器工作完美！它自动读取了本地缓存并加上了头。
-
-✅ 验证点 3：响应拦截器 (错误处理)
-
-*   看页面顶部是否弹出了一个红色的提示框 (`Message`)？
-    *   提示内容可能是“登录已过期”或“Forbidden”或“Not Found”。
-*   判断：
-    *   如果你用了假 Token 请求 `/users/me`，Strapi 后端会返回 `401` 或 `403`。
-    *   如果页面弹出了红色的 `ElMessage` 提示框，说明你的响应拦截器成功捕获了错误并进行了反馈。
-    *   如果你刚才在 `request.ts` 里写了 `router.push('/login')`，你甚至会发现浏览器的地址栏变成了 `http://localhost:5173/login`。
-
-    ![2025-12-1-140243.png](assets/2025-12-01_前端开发实战记录-Phase1/2025-12-1-140243.png)
-
-🧹 第三步：清理现场
-
-验证全部通过后，说明地基非常牢固。请执行以下清理操作，为 Phase 2 做准备：
-
-*   还原 `App.vue`：将 `App.vue` 恢复成最简单的 `<router-view />`，以便后面由路由控制页面显示。
-
-修改 `src/App.vue` 为：
-代码段
-
-```vue
-<script setup lang="ts">
-</script>
-
-<template>
-  <router-view />
-</template>
-
-<style>
-/* 全局样式重置，可选 */
-html, body, #app {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-}
-</style>
-```
-
-*   清除假 Token：
-
-    *   在浏览器控制台 (`Console`) 输入：`localStorage.clear()` 并回车。
-
-
 # **📝 前端开发实战记录 - Phase 2：核心页面框架构建**
 
 日期：2025-12-01  
@@ -280,129 +87,6 @@ html, body, #app {
 
 ---
 
-## **2. 🐛 遇到的问题与解决方案 (Troubleshooting)**
-
-### **🔴 问题一：TypeScript 类型导入报错**
-
-**报错信息**：  
-"RouteRecordRaw"是一种类型，必须在启用 "verbatimModuleSyntax" 时使用仅类型导入进行导入。
-
-**原因**：  
-Vite 默认开启严格模式，TS 不允许将"类型定义"和"功能函数"混写在同一个 import 语句中。
-
-**✅ 解决方案**：  
-在 `src/router/index.ts` 中拆分导入语句：
-
-````typescript
-import { createRouter, createWebHistory } from 'vue-router' // 导入功能
-import type { RouteRecordRaw } from 'vue-router'            // 导入类型
-````
-
----
-
-### **🔴 问题二：Firefox 浏览器无法打开（Upgrade Required）**
-
-**报错信息**：  
-页面白屏或显示 Upgrade Required (HTTP 426)，但在 Edge/Chrome 下正常。
-
-**原因**：  
-Vite 开发服务器默认监听 `localhost`，而 Windows 下的 Firefox 对 IPv6/IPv4 解析机制较为严格，导致 WebSocket 热更新连接握手失败。
-
-**✅ 解决方案**：  
-修改 `vite.config.ts`，强制开发服务器绑定到 IPv4 地址：
-
-````typescript
-export default defineConfig({
-  plugins: [vue()],
-  server: {
-    host: '127.0.0.1', // 强制使用 IPv4
-    port: 5173,
-  }
-})
-````
-
-*注意：修改配置后必须重启终端*（Ctrl + C → `npm run dev`）*才能生效。*
-
----
-
-### **🔴 问题三：登录后界面缺失菜单（高度塌陷）**
-
-**现象**：  
-登录后只显示了首页内容，左侧菜单栏和顶部导航栏消失（或高度为 0）。
-
-**原因**：  
-Vue 的根节点 `#app` 和 `body` 默认高度由内容撑开。如果内容很少，容器高度不足 100%，导致 Flex 布局的侧边栏无法撑满屏幕。
-
-**✅ 解决方案**：  
-在 `src/App.vue` 中强制设置全局高度：
-
-````css
-html, body, #app {
-  height: 100%; /* 关键：必须占满屏幕 */
-  margin: 0;
-  padding: 0;
-  width: 100%;
-}
-````
-
----
-
-### **🔴 问题四：VSCode 误报"找不到模块 ts(2307)"**
-
-**现象**：  
-在 Vue 3 + TypeScript 项目中，编写路由或组件引入代码时，出现以下报错：
-
-```
-找不到模块"../views/home/index.vue"或其相应的类型声明。ts(2307)
-```
-
-具体特征：
-* 文件确实存在：在文件资源管理器中，该路径下的文件是真实存在的。
-* 路径拼写正确：经过检查，文件名大小写和相对路径均无误。
-* 部分正常：同一文件中的其他引入（如 login 或 layout）没有报错，唯独新建的这个文件报错。
-
-**原因**：  
-这是 VSCode 编辑器的 TypeScript 语言服务（TS Server）缓存不同步导致的常见问题。
-
-* 当在编辑器打开的情况下新建文件或文件夹时，TS Server 偶尔未能及时监听到文件系统的变化。
-* 导致它仍然认为该文件"不存在"，从而抛出错误的类型检查警告。
-* 这不是代码本身的错误，而是编辑器的服务"卡顿"了。
-
-**✅ 解决方案**：  
-通过重启 VSCode 的 TypeScript 服务来强制刷新缓存。
-
-操作步骤：
-
-1. **打开命令面板**：
-   * Windows/Linux：按下 Ctrl + Shift + P
-   * Mac：按下 Cmd + Shift + P
-
-2. **输入命令**：
-   * 在输入框中输入：`Restart TS Server` （中文环境下可尝试搜"重启 TypeScript 服务器"）
-
-3. **执行**：
-   * 选中对应选项并回车。
-
-4. **结果**：
-   * 等待下方状态栏闪烁几秒后，红线报错即会自动消失。
-
-**💡 经验总结**：  
-在开发过程中，如果确认"路径没错"且"配置没错"（如 env.d.ts 已配置），但依然出现 ts(2307) 找不到模块的错误，请优先使用"重启 TS Server"大法，而不要盲目修改代码配置。
-
----
-
-## **3. 🎉 阶段总结**
-
-至此，**Phase 2 圆满完成**！✅
-
-现在的系统具备了：
-
-* **安全性**：进门要查"工牌"（Token）。
-* **稳定性**：解决了浏览器兼容问题。
-* **美观性**：拥有了标准的后台管理界面框架。
-
-**🚀 下一步（Phase 3）**：进入最核心的业务开发——对接患者管理 (Patients) 模块，实现真实的增删改查。
-
 
 # **📝 前端开发实战记录 - Phase 3.1：患者列表对接**
 
@@ -453,62 +137,6 @@ html, body, #app {
 * 在 Layout 的 `children` 下新增 `path: 'patients'`。
 * 将登录后的默认重定向从 `/home` 改为 `/patients`，方便调试。
 
----
-
-## **2. 🐛 遇到的问题与解决方案 (Troubleshooting)**
-
-这是本阶段最有价值的经验总结。
-
-### **🔴 问题一："洋葱皮"数据解包错误**
-
-**现象**：
-
-* 页面加载图标一直转圈，控制台报错：`TypeError: can't access property "pagination", res.meta is undefined`。
-* Vue 警告：`Invalid prop: Expected Array, got Object`。
-
-**原因**：
-
-* **认知偏差**：我们以为 `res` 就是数据数组。
-* **事实真相**：`res` 是 Axios 的完整响应对象。
-  * 第一层 `res.data`：是 HTTP 响应体（包含 Strapi 的 data 和 meta）。
-  * 第二层 `res.data.data`：才是真正的患者列表数组。
-  * 第二层 `res.data.meta`：才是分页信息。
-
-**✅ 解决方案**：在 `fetchData` 中多剥一层"洋葱"：
-
-````typescript
-// ❌ 错误写法
-// tableData.value = res.data
-
-// ✅ 正确写法 (防御性编程)
-if (res.data) {
-    tableData.value = res.data.data || [] 
-    total.value = res.data.meta?.pagination?.total || 0
-}
-````
-
----
-
-### **🔴 问题二：TypeScript 类型定义冲突**
-
-**现象**：
-
-* IDE 爆红：类型"Patient[]"上不存在属性"data"。
-
-**原因**：
-
-* 我们在 `src/api/patient.ts` 里告诉 TS 这个接口返回的是 `ApiResponse<Patient>`（我们定义的结构）。
-* 但实际代码中，`request.ts` 的拦截器可能没有处理这一层，导致 TS 认为 `res` 已经是数据了，但实际运行时它还是 Axios 对象。
-* 编译器定义与运行时结构打架了。
-
-**✅ 解决方案**：暂时使用 `any` 类型断言，告诉 TS "按我说的做，别管类型检查"：
-
-````typescript
-// 强制断言 res 为 any，以此访问 .data 属性
-const res: any = await getPatientList(apiParams as any)
-````
-
----
 
 ## **3. 💡 关键经验 (Key Takeaways)**
 
@@ -517,18 +145,6 @@ const res: any = await getPatientList(apiParams as any)
 * **Strapi 结构**：Strapi 的标准返回通常是 `{ data: [...], meta: {...} }`，前端需要根据 Axios 拦截器的配置决定剥离几层。
 
 * **API 权限**：永远记得在 Strapi 后台 **Settings -> Roles -> Public/Authenticated** 中勾选对应的 API 权限，并点击 Save。
-
----
-
-## **🚀 下一步计划 (Next Step)**
-
-现在列表页已经能够显示，接下来的任务是实现 "增"和"改"：
-
-* **目标**：点击"新建患者"弹出一个对话框（Dialog）。
-* **内容**：包含姓名、性别、生日的表单。
-* **接口**：对接 POST /patients 和 PUT /patients/:id。
-
-准备好继续了吗？我们可以开始写弹窗组件了！
 
 
 # 📝 前端开发实战记录 - Phase 3：治疗记录管理 (Treatment)
@@ -671,12 +287,6 @@ const res: any = await getPatientList(apiParams as any)
 3. **防御性编程：** 在编写 Lifecycle Hooks 时，必须考虑到数据来源的多样性（API 调用 vs 后台界面操作），数据结构可能完全不同。
 
 ---
-
-## 🚀 下一步计划
-
-至此，核心的 CRUD 和关联业务已打通。接下来的 Phase 4 我们将攻克最后一个难点：
-
-- **多图上传与展示：** 处理 `Images` 字段，实现前端上传图片到 Strapi，并在列表中预览。
 
 
 # Phase 4 开发全过程总结 (Summary)
@@ -842,17 +452,8 @@ VITE_API_URL=http://192.168.1.5:1337
 
 - **永远不要在代码里写死 URL (Hardcoding)**。使用 `VITE_API_URL` 可以让你在不做任何代码修改的情况下，适应本机开发、局域网测试和上线生产环境。
 
----
-
-## 🚀 总结
-
-你的项目现在已经具备了非常高的完成度和工程化水平！接下来，你可以随时把手机递给别人演示你的 Hospital CMS 了！
 
 # Phase 4.2 开发记录：患者列表集成治疗记录查看功能
-
-以下是关于"**患者列表集成治疗记录查看功能**"这一开发阶段的完整总结。
-
-我们成功实现了在患者列表页直接预览治疗记录概览，并能点击弹窗查看包含影像详情的完整记录。这一过程主要攻克了 **Strapi v5 的破坏性更新** 以及 **Vue + TypeScript 的类型严格性** 带来的挑战。
 
 ---
 
@@ -872,8 +473,6 @@ VITE_API_URL=http://192.168.1.5:1337
 ---
 
 ## 2. 遇到的问题与解决方案 (Troubleshooting Log)
-
-这一阶段遇到的问题非常具有代表性，主要集中在 **数据结构层级** 和 **API 协议匹配** 上。
 
 ### Q1: 分页报错 `PaginationError`
 
@@ -925,14 +524,6 @@ if (res.status === 200 && res.data && res.data.data) {
 ## 3. 下一步建议 (Next Step)
 
 现在你的系统已经具备了相当完善的"读"能力（查看患者、查看关联的治疗记录、查看影像）。
-
-### 建议接下来的开发方向：
-
-* **方向 A（完善闭环）：** 目前只能"看"治疗记录，是否需要实现 **"编辑/删除治疗记录"** 的功能？（比如医生传错了图片需要修改）。
-* **方向 B（新建流程）：** 在患者列表页直接 **"新增治疗记录"**（现在可能需要去单独页面？），优化录入体验。
-* **方向 C（数据可视化）：** 既然有了治疗部位和时间数据，是否需要做一个简单的图表，显示该患者的治疗频率？
-
-**你想先攻克哪一个方向？或者继续优化现有的细节？**
 
 # 患者管理页面 UI 美化与移动端适配 - 阶段总结
 
@@ -1006,16 +597,6 @@ if (res.status === 200 && res.data && res.data.data) {
 
 **解决**：移除 `.slice(1)`，遍历完整数组。
 
-## 3. 当前系统状态 (Current Status)
-
-现在的 Hospital CMS 已经具备了**准生产级的交互体验**：
-
-- **全终端兼容**：无论是在电脑、iPad 还是手机上访问，布局都能自动适应。
-
-- **数据展示清晰**：医生可以一眼看到患者的年龄、性别以及最近一次治疗情况。
-
-- **操作流畅**：增删改查、查看影像详情、切换菜单均无阻碍。
-
 ---
 
 
@@ -1060,13 +641,6 @@ if (res.status === 200 && res.data && res.data.data) {
 | 类型定义不同步 | `types.ts` 里的类型与实际映射表可能不一致，导致 IDE 无法准确纠错。 | 动态推导类型：使用 `export type TreatmentTarget = keyof typeof TREATMENT_TARGET_MAP`。 |
 | 提交数据非法 | Strapi 后端枚举字段只接受英文，如果前端直接传中文会导致 400 错误。 | Label/Value 分离：下拉框显示 label (中文)，但 `v-model` 绑定 value (英文)。 |
 | 数据渲染不确定性 | 如果后端返回了映射表之外的旧数据，前端可能显示为空。 | 防御性渲染：使用 `TREATMENT_TARGET_MAP[key] || '未知部位'` 确保始终有备选显示。 |
-
-## 💡 核心经验总结
-
-1. **规范优于实现**：通过 `constants + types` 的联动，将原本散落在业务代码中的硬编码逻辑转化为了受 TypeScript 保护的配置项。
-
-2. **前后端解耦**：前端保留了对原始英文 Key 的处理能力，通过"翻译层"将其转为对用户友好的中文，而不需要后端改动数据库结构。
-
 
 # 开发记录 - Phase 4.5
 
@@ -1170,9 +744,6 @@ if (res.status === 200 && res.data && res.data.data) {
 
 # iOS 图片上传旋转问题完整复盘 (Phase 4.7)
 
-这是一个非常扎实的技术攻坚过程。我们从最初的"图片方向不对"，到"过度修正"，再到"所见非所得"，最后通过**像素重绘（Pixel Baking）**彻底解决了 iOS 移动端上传图片的顽疾。
-
-以下是关于 iOS 图片上传旋转问题 及其配套流程改造的完整复盘总结：
 
 ## 一、 核心问题：为什么 iOS 拍照会旋转？
 
@@ -1220,55 +791,6 @@ iOS 为了拍照速度，相机传感器始终按"横屏"模式记录数据。�
 | 后端报错 | API 返回 400 Bad Request | Strapi 报错 Invalid key data。 | 双重封装问题。API 函数封装了一层 `{data: ...}`，组件调用时又封装了一层。解包即可。 |
 | 画质损耗 | 图片模糊 | compressorjs 和 Canvas 导出默认会有压缩（默认 0.8）。 | 将 Canvas 导出质量参数 (encoderOptions) 和插件参数显式设为 1.0。 |
 
-## 四、 最终代码逻辑流程图
-
-这是我们最终确定的稳定逻辑：
-
-```
-用户选图/拍照 ⬇️
-
-Step 1: 预处理 (HandleFileChange)
-  ├─ 动作：直接读取文件。
-  ├─ 动作：await fileToImage(file) 
-  │         (让浏览器解析 EXIF 并生成视觉正确的 Image 对象)
-  └─ 关键：await processRotation(img, 0) 
-           (像素清洗/固化：把视觉正确的图像"烧录"进像素，去除 EXIF)
-    ⬇️
-
-Step 2: 本地预览
-  ├─ 显示清洗后的图片。
-  └─ 用户发现方向不对？ -> 点击 [旋转] 按钮。
-     └─ 动作：await processRotation(img, 90) -> 替换本地文件。
-    ⬇️
-
-Step 3: 父组件提交
-  ├─ 用户点击"确认创建"。
-  ├─ 动作：父组件调用 uploaderRef.value.submitAll()。
-  └─ 动作：子组件并发上传图片 -> 返回 ID 数组 [101, 102]。
-    ⬇️
-
-Step 4: 数据写入
-  ├─ 父组件将 [101, 102] 填入 Payload。
-  └─ 发送 createTreatment 请求。
-```
-
-## 五、 总结与建议
-
-通过这次重构，你的 Hospital CMS 在移动端的可靠性提升了一个台阶。
-
-### 数据层面
-保证了"所见即所得"，彻底消除了跨平台（iOS vs Android vs PC）显示不一致的隐患。
-
-### 交互层面
-从"黑盒自动上传"变成了"用户可控的所见即所得"，更符合医疗严谨性的要求。
-
-### 隐私层面
-坚持使用浏览器 input 调起相机，不保存照片到医生私人相册，符合合规要求。
-
-### 后续建议
-目前的 `submitAll` 是并发上传，如果医生一次拍了 10 张高清图，可能会阻塞网络。如果后续遇到卡顿，可以考虑改为"队列上传"（一张传完再传下一张）并增加进度条。目前暂时够用。
-
-
 📝 开发实战记录：患者页面交互重构与移动端适配
 一、 开发目标与过程回顾
 
@@ -1313,46 +835,6 @@ Step 4: 数据写入
 | 预览体验 | 大图预览位置错误：已经在走马灯滑到了第 3 张，点开大图却显示第 1 张。 | el-image 的预览器默认索引 (initial-index) 为 0。 | 在 v-for 中获取 imgIndex，并绑定 :initial-index="imgIndex"，同步列表与预览器的位置。 |
 | 环境依赖 | Vite 启动报错：Error: ENOENT... node_modules\qs\... | 误删文件或依赖安装不完整，导致 qs 库丢失。 | 停止服务，运行 npm install 重新补全依赖。 |
 
-三、 核心代码片段存档
-
-为了方便后续查阅，以下是本次最核心的移动端手势控制逻辑（解决了引用隔离和类型安全问题）：
-
-```typescript
-// 存储所有轮播图实例的字典
-const carouselRefs = ref<Record<number, any>>({})
-
-// 动态绑定 Ref
-const setCarouselRef = (el: any, index: number | string) => {
-  if (el) carouselRefs.value[Number(index)] = el
-}
-
-// 触摸结束处理 (精准控制)
-const onTouchEnd = (e: TouchEvent, index: number | string) => {
-  if (!e.changedTouches || e.changedTouches.length === 0) return
-
-  const touchEndX = e.changedTouches[0]!.clientX
-  // ... 计算 diffX ...
-
-  // 判定为水平滑动
-  if (Math.abs(diffX) > 50) {
-    // 🎯 核心：通过 Index 找到特定的那个轮播图
-    const targetCarousel = carouselRefs.value[Number(index)]
-    if (targetCarousel) {
-      diffX > 0 ? targetCarousel.next() : targetCarousel.prev()
-    }
-  }
-}
-```
-
-四、 总结
-
-现在的 患者档案模块 已经具备了非常高的完成度：
-
-    视觉上：摆脱了"后台管理系统"的生硬感，拥有了专业的医疗 App 质感。
-
-    体验上：解决了移动端最头疼的图片浏览和手势冲突问题。
-
-    代码上：修复了 API 层的隐患，并完善了 TypeScript 类型定义。
 
 
 # 📝 全栈开发实战记录 - Phase 4.9：治疗时长字段集成
@@ -1422,60 +904,49 @@ const submitData = {
 
 ---
 
-## 三、 核心代码存档
+# 开发记录：新建治疗记录组件集成
 
-### 1. 提交逻辑修正 (index.vue)
+## 1. 功能概述
 
-这是解决数据丢失问题的核心代码：
+本次开发的核心目标是实现**"治疗记录"的快捷创建**，并将其复用到系统的不同层级中。
 
-```typescript
-// src/views/treatments/index.vue -> handleSubmit
-const submitData = {
-  patient: formData.patient,
-  target: formData.target,
-  sequence_number: formData.sequence_number,
-  duration: formData.duration, // 👈 修复点：千万别漏了它
-  Images: imageIds 
-}
-await createTreatment(submitData)
-```
+- **组件名称**： TreatmentCreateDialog.vue
+- **涉及页面**： 
+  - views/patients/index.vue (病人列表)
+  - components/PatientDetailDialog.vue (病人详情)
+- **核心能力**： 支持"锁定病人"模式（从病人入口进入）和"搜索病人"模式（独立入口进入，暂未启用但预留逻辑），支持多图上传、部位选择及治疗时长记录。
 
-### 2. 详情页样式增强 (PatientDetailDialog.vue)
+## 2. 核心开发步骤
 
-这是实现"大字体、高对比度"展示的核心样式：
+### 第一步：组件封装 (TreatmentCreateDialog.vue)
 
-```css
-/* 放大治疗序号 */
-.treatment-no { 
-  font-size: 24px; 
-  font-weight: 700; 
-  color: #111827; 
-}
+**状态管理**： 使用 isPatientLocked 状态位。
+- 如果调用 open({ documentId, Name }) 传入了参数，则锁定输入框，禁止修改病人。
+- 如果未传参，则允许通过 API 远程搜索病人（searchPatients）。
 
-/* 放大日期 */
-.date-text { 
-  font-size: 16px; 
-  font-weight: 500; 
-  color: #6b7280;
-}
+**表单设计**：
+- 包含：关联患者、治疗部位、治疗时长、影像上传（复用 ImageUploader）、手动序号。
+- 使用了 nextTick 清除表单校验残留。
 
-/* 强制放大标签内文字 */
-:deep(.header-main .el-tag) {
-  font-size: 15px !important; 
-  height: 32px; 
-  padding: 0 12px;
-}
-```
+**对外暴露**： 使用 defineExpose({ open }) 供父组件调用，遵循统一的交互规范。
 
----
+**事件通信**： 提交成功后触发 emit('success')，通知父组件刷新数据。
 
-## 四、 总结
+### 第二步：详情页集成 (PatientDetailDialog.vue)
 
-通过本次迭代，系统的数据维度更加丰富，不仅记录了"做了什么 (Target)"，还记录了"做了多久 (Duration)"。同时，通过对详情页字号的微调，显著提升了医生在移动设备或查房场景下的阅读体验。
+**入口位置**： 放置在弹窗顶部的 Header 区域（右侧），提高了操作的可见性。
 
-**关键收获：**
-- ✅ 全链路数据流通：后端字段 → 类型定义 → 前端逻辑 → UI 展示
-- ✅ 调试技巧：学会识别和处理 TypeScript Language Server 的缓存问题
-- ✅ UI/UX 优化：通过微调字号和样式，显著改善用户体验
+**数据流转**：
+- 点击"新建治疗记录" -> 调用子组件 open()，传入当前 patientData。
+- 子组件提交成功 -> 触发 @success。
+- 父组件捕获事件 -> 重新调用 open(currentDocumentId) 刷新详情数据，更新"共 N 次"标签和时间轴列表。
+
+### 第三步：列表页集成 (views/patients/index.vue)
+
+**入口位置**： 每个病人卡片的底部操作栏（Footer）。
+
+**数据流转**：
+- 点击卡片按钮 -> 获取当前行数据 row -> 调用子组件 open()。
+- 提交成功 -> 触发 @success -> 调用 fetchData() 刷新整个列表（更新卡片上的统计数据）。
 
 
