@@ -1124,3 +1124,44 @@ Dev Context Snapshot [2025-12-29]
     Dependencies: 依赖 src/components/TreatmentCreateDialog.vue
 
     Config: 沿用 VITE_API_URL 环境变量。
+
+Dev Context Snapshot [2025-12-29]
+1. 核心任务与状态
+
+    当前目标: views/treatments/index.vue 移动端适配与 TypeScript 类型修复
+
+    当前状态: 已完成 (代码已生成并修正)
+
+    关键文件:
+
+        src/views/treatments/index.vue: 实现 Table/Card 响应式切换，修正 getThumbnailUrl 参数签名。
+
+2. 本次会话变动 (Changelog)
+
+    [新增] 响应式布局:
+
+        引入 isMobile (阈值 768px) 及 resize 监听。
+
+        PC 端保持 <el-table>，移动端渲染 .mobile-card 列表。
+
+        顶部搜索栏在移动端改为垂直堆叠 (Column Layout)。
+
+    [优化] 分页逻辑: 移动端强制简化为 prev, pager, next 布局。
+
+    [修复] TS 类型错误:
+
+        报错: item.Images[0] 可能为 undefined 导致无法赋值给 StrapiMedia。
+
+        解决: 修改 getThumbnailUrl 签名，接受 StrapiMedia | undefined 并内部处理空值。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 在真机环境验证移动端卡片列表的滚动流畅度及图片预览 (Preview) 的层级显示。
+
+    TODO: 检查新建弹窗 (TreatmentCreateDialog) 在移动端触发时的宽度适配情况。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3 (Composition API), TypeScript, Element Plus (Icons: Timer, Calendar, Plus, etc.)
+
+    Config: 依赖 VITE_API_URL 环境变量。
