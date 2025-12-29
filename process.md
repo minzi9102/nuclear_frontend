@@ -949,4 +949,47 @@ const submitData = {
 - 点击卡片按钮 -> 获取当前行数据 row -> 调用子组件 open()。
 - 提交成功 -> 触发 @success -> 调用 fetchData() 刷新整个列表（更新卡片上的统计数据）。
 
+Dev Context Snapshot [2025-12-29]
+1. 核心任务与状态
 
+    当前目标: 重构患者列表卡片 (PatientCard) UI，优化移动端交互与视觉层级。
+
+    当前状态: ✅ 代码已生成 (Ready to Apply)
+
+    关键文件:
+
+        src/views/patients/index.vue: 修改 Header/Body/Footer 结构，引入下拉菜单。
+
+2. 本次会话变动 (Changelog)
+
+    [UI重构] el-card Header:
+
+        移除: 独立的年龄 Tag。
+
+        新增: el-dropdown (图标: MoreFilled, 旋转90度)，包含"编辑"与"删除"选项。
+
+        逻辑: 添加 @click.stop 阻止冒泡，避免触发卡片详情跳转。
+
+    [UI重构] el-card Body:
+
+        修改: 将年龄信息 (N岁) 移至生日字段旁显示。
+
+    [UI重构] el-card Footer:
+
+        移除: 原有的"编辑/删除"按钮组。
+
+        保留: 仅保留"新建治疗记录"按钮，样式改为 plain。
+
+    [Style]: 新增 .text-danger 样式，使下拉菜单中的删除项显示为红色。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 将提供的 <template>, <script> (imports), <style> 代码片段应用到 src/views/patients/index.vue。
+
+    Note: 需验证移动端点击"三个点"图标的触控区域是否足够灵敏。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3, TypeScript, Element Plus (Icons: @element-plus/icons-vue)
+
+    Config: 依赖 MoreFilled 图标组件。

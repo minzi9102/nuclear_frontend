@@ -4,7 +4,7 @@ import {
   Search, Plus, Edit, Delete, 
   Male, Female, Calendar,
   Filter, Refresh, Finished,
-  FolderOpened
+  FolderOpened, MoreFilled
 } from '@element-plus/icons-vue' 
 import { getPatientList, deletePatient, createPatient, updatePatient } from '../../api/patient'
 import type { Patient } from '../../api/types'
@@ -223,7 +223,7 @@ onMounted(() => { fetchData() })
             @click="handleCardClick(patient.documentId!)"
           >
             
-            <div class="card-header p-4 flex justify-between items-center bg-gray-50 border-b">
+            <div class="card-header p-4 flex justify-between items-center bg-gray-50 border-b relative">
               <div class="flex items-center gap-2">
                 <span class="text-lg font-bold text-gray-800 truncate">{{ patient.Name }}</span>
                 <el-icon :class="patient.Gender === 'male' ? 'text-blue-500' : 'text-pink-500'" class="text-lg">
@@ -231,15 +231,33 @@ onMounted(() => { fetchData() })
                   <Female v-else />
                 </el-icon>
               </div>
-              <el-tag type="info" effect="plain" round>
-                {{ calculateAge(patient.Birthday) }} 岁
-              </el-tag>
+
+              <div @click.stop>
+                <el-dropdown trigger="click">
+                  <span class="el-dropdown-link p-2 -mr-2 text-gray-400 hover:text-gray-600">
+                    <el-icon class="text-lg transform rotate-90"><MoreFilled /></el-icon>
+                  </span>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item :icon="Edit" @click="handleEdit(patient)">
+                        编辑档案
+                      </el-dropdown-item>
+                      <el-dropdown-item :icon="Delete" class="text-danger" divided @click="handleDelete(patient)">
+                        删除患者
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
             </div>
 
             <div class="card-body p-4">
               <div class="info-row text-gray-500 text-sm mb-3 flex items-center gap-2">
                 <el-icon><Calendar /></el-icon>
-                <span>生日: {{ patient.Birthday }}</span>
+                <span>
+                  {{ patient.Birthday }} 
+                  <span class="ml-1 text-gray-400">({{ calculateAge(patient.Birthday) }}岁)</span>
+                </span>
               </div>
 
               <div class="info-row text-gray-500 text-xs mb-3 flex items-start gap-2 bg-gray-50 p-2 rounded">
@@ -254,42 +272,23 @@ onMounted(() => { fetchData() })
               </div>
 
               <div class="flex justify-between items-center mt-4">
-                 <span class="text-xs text-gray-400">治疗记录</span>
-                 <div v-if="patient.treatments?.length" class="flex items-center gap-1">
+                <span class="text-xs text-gray-400">治疗记录</span>
+                <div v-if="patient.treatments?.length" class="flex items-center gap-1">
                     <el-tag size="small" type="success" round>共 {{ patient.treatments.length }} 次</el-tag>
                     <span class="text-xs text-gray-300">|</span>
                     <span class="text-xs text-blue-500 font-bold">查看详情 ></span>
-                 </div>
-                 <span v-else class="text-xs text-gray-300">暂无记录</span>
+                </div>
+                <span v-else class="text-xs text-gray-300">暂无记录</span>
               </div>
             </div>
 
             <div class="card-footer px-4 py-3 border-t bg-white" @click.stop>
-  
-              <div class="action-row flex justify-between items-center mb-3 pb-3 border-b border-dashed border-gray-100">
-                <el-button 
-                  type="primary" 
-                  link 
-                  :icon="Edit" 
-                  @click.stop="handleEdit(patient)"
-                >
-                  编辑档案
-                </el-button>
-                
-                <el-button 
-                  type="danger" 
-                  link 
-                  :icon="Delete" 
-                  @click.stop="handleDelete(patient)"
-                >
-                  删除
-                </el-button>
-              </div>
               <el-button 
                 class="w-full"
                 type="primary" 
                 :icon="Plus" 
                 round 
+                plain
                 @click.stop="handleCreateTreatment(patient)" 
               >
                 新建治疗记录
@@ -385,4 +384,6 @@ onMounted(() => { fetchData() })
 }
 :deep(.el-checkbox.is-bordered) { margin-left: 0 !important; margin-right: 8px !important; }
 :deep(.el-checkbox-group) { display: flex; flex-wrap: wrap; }
+:deep(.text-danger) {  color: #f56c6c !important;}
+:deep(.text-danger:hover) {  background-color: #fef0f0 !important;}
 </style>
