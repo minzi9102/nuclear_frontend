@@ -82,22 +82,31 @@
             class="custom-collapse-item"
           >
             <template #title>
-              <div class="collapse-header-content">
-                <div class="header-main">
+              <div class="collapse-header-wrapper">
+                
+                <div class="header-primary">
                   <span class="treatment-no">{{ treatment.treatmentNo }}</span>
-                  <el-tag size="large" effect="plain" class="ml-2">
-                      {{ (TREATMENT_TARGET_MAP as any)[treatment.target] || treatment.target }}
+                  <el-tag size="default" effect="plain" class="target-tag">
+                    {{ (TREATMENT_TARGET_MAP as any)[treatment.target] || treatment.target }}
                   </el-tag>
-                  <el-tag v-if="treatment.duration" type="info" size="large" effect="plain" class="ml-2" style="display: flex; align-items: center; border: 1px solid #f3f4f6;">
-                    <el-icon style="margin-right: 4px"><Timer /></el-icon>
-                    {{ treatment.duration }} 小时
-                  </el-tag>
-                  <span class="date-text ml-2" style="margin-left: 20px;">
-                    {{ new Date(treatment.createdAt).toLocaleDateString() }}
+                </div>
+
+                <div class="header-secondary">
+                  <template v-if="treatment.duration">
+                    <span class="meta-item duration-tag">
+                      <el-icon class="meta-icon"><Timer /></el-icon>
+                      {{ treatment.duration }}小时
+                    </span>
+                    <span class="meta-separator">|</span>
+                  </template>
+                  
+                  <span class="meta-item date-text">
+                   记录时间：{{ new Date(treatment.createdAt).toLocaleDateString() }}
                   </span>
                 </div>
+
               </div>
-            </template>
+              </template>
 
             <div class="collapse-body">
               <div v-if="treatment.Images && treatment.Images.length > 0" class="image-wrapper" @touchstart="onTouchStart" @touchend="(e) => onTouchEnd(e, index)">
@@ -244,7 +253,7 @@ defineExpose({ open })
 .custom-collapse-item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 :deep(.el-collapse-item__header) { height: auto !important; line-height: normal !important; padding: 1px 5px 1px 5px !important; font-size: 15px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; }
 :deep(.el-collapse-item__header.is-active) { background-color: #f9fafb; }
-:deep(.el-collapse-item__arrow) { margin: 24px !important; flex-shrink: 0;}
+:deep(.el-collapse-item__arrow) { margin: 16px !important; flex-shrink: 0;}
 :deep(.el-collapse-item__content) { padding-bottom: 0 !important; }
 .collapse-header-content { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: center; margin-right: 12px; }
 .header-main { display: flex; align-items: center; flex-shrink: 0; }
@@ -262,6 +271,79 @@ defineExpose({ open })
 :deep(.el-carousel__arrow) { background-color: rgba(255, 255, 255, 0.8); color: #6b7280; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 :deep(.el-carousel__indicators--outside button) { background-color: #e5e7eb; }
 :deep(.el-carousel__indicators--outside .is-active button) { background-color: #3b82f6; }
+/* --- 新增：上下分层布局样式 --- */
+
+/* 容器：垂直排列 */
+.collapse-header-wrapper {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 0; /* 增加上下内边距，让点击区域更大 */
+  width: 100%;
+  line-height: 1.4; /* 优化行高 */
+}
+
+/* 第一行：序号和部位 */
+.header-primary {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px; /* 与第二行的间距 */
+}
+
+.treatment-no {
+  font-size: 17px;
+  font-weight: 700;
+  color: #111827;
+  margin-right: 10px; /* 序号右侧留白 */
+}
+
+.target-tag {
+  border: none; /* 去除边框，显得更现代 */
+  background-color: #eff6ff; /* 极淡的蓝色背景 */
+  color: #2563eb;
+  font-weight: 500;
+}
+
+/* 第二行：辅助信息 */
+.header-secondary {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: #9ca3af; /* 灰色文字 */
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+}
+
+.meta-icon {
+  margin-right: 3px;
+  font-size: 14px;
+  position: relative;
+  top: -1px; /* 微调图标位置对齐 */
+}
+
+.meta-separator {
+  margin: 0 8px;
+  color: #e5e7eb; /* 极淡的分隔线 */
+  font-size: 10px;
+}
+
+/* 覆盖旧样式：确保折叠面板头部高度自动撑开 */
+:deep(.el-collapse-item__header) {
+  height: auto !important; 
+  min-height: 48px;
+  padding: 4px 0 4px 10px !important; /* 左侧留一点空隙 */
+  align-items: flex-start; /* 箭头顶部对齐，防止两行时箭头位置尴尬 */
+}
+
+/* 调整箭头位置，让它居中显示 */
+:deep(.el-collapse-item__arrow) {
+  margin: auto 12px auto auto !important; /* 垂直居中 */
+  color: #d1d5db;
+}
+
 </style>
 
 <style>

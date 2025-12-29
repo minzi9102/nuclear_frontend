@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, nextTick, computed } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
-import { useWindowSize } from '@vueuse/core'
 
 // 组件引入
 import ImageUploader from '../components/ImageUploader/index.vue'
