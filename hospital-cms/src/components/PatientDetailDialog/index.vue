@@ -69,10 +69,9 @@ const treatmentCreateRef = ref()
 
 const openCreateDialog = () => {
   if (patientData.value) {
-    treatmentCreateRef.value.open({
-      documentId: patientData.value.documentId,
-      Name: patientData.value.Name
-    })
+    // ✅ 正确：直接传递完整的响应式对象
+    // 此时 patientData.value 包含了 Name, Gender, Birthday 等所有字段
+    treatmentCreateRef.value.open(patientData.value)
   }
 }
 

@@ -38,8 +38,9 @@ const handlePageChange = (val: number) => { queryParams.page = val; fetchData() 
 const openCreate = () => formDialogRef.value?.open()
 const openEdit = (row: any) => formDialogRef.value?.open(row)
 const openDetail = (id: string) => patientDetailRef.value?.open(id)
-const openCreateTreatment = (row: any) => {
-  treatmentCreateRef.value?.open({ documentId: row.documentId, Name: row.Name })
+const handleCreateTreatment = (patient: any) => {
+  // 直接把这个完整对象传给新建弹窗
+  treatmentCreateRef.value?.open(patient)
 }
 
 const handleTreatmentSuccess = () => {
@@ -86,7 +87,7 @@ onMounted(() => { fetchData() })
             @click="openDetail"
             @edit="openEdit"
             @delete="handleDelete"
-            @create-treatment="openCreateTreatment"
+            @create-treatment="handleCreateTreatment"
           />
         </el-col>
       </el-row>

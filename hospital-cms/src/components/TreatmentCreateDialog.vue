@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, reactive, nextTick, computed } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
+import dayjs from 'dayjs' // 建议引入 dayjs 处理日期，或用原生 Date
+import { pinyin } from 'pinyin-pro'
 
 // 组件引入
 import ImageUploader from '../components/ImageUploader/index.vue'
@@ -35,6 +37,9 @@ const patientOptions = ref<Patient[]>([])
 // 锁定状态：如果从病人详情页打开，则锁定病人选择
 const isPatientLocked = ref(false)
 
+// 临时存储传入的完整患者对象
+const lockedPatientData = ref<Patient | null>(null)
+
 // --- 响应式布局逻辑 ---
 // 如果没有 @vueuse/core，我们可以简单地用 computed 判断 width
 const width = ref(window.innerWidth)
@@ -58,24 +63,24 @@ const rules = {
 
 /**
  * 打开弹窗的方法（供父组件调用）
- * @param patient 可选，传入特定病人对象 { documentId, Name }
+ * @param patient 传入完整的患者对象 (包含 Name, Gender, Birthday)
  */
-const open = (patient?: { documentId: string; Name: string }) => {
+const open = (patient?: Patient) => {
   // 1. 重置表单
   formData.patient = ''
   formData.patientName = ''
   formData.target = '' 
   formData.sequence_number = undefined
   formData.duration = 48
+
   patientOptions.value = []
+  lockedPatientData.value = null // 重置
   
-  // 2. 判断是否有预设病人 (优先使用 open 参数，其次使用 props)
-  const targetPatient = patient || props.defaultPatient
-  
-  if (targetPatient) {
+  if (patient) {
     isPatientLocked.value = true
-    formData.patient = targetPatient.documentId
-    formData.patientName = targetPatient.Name
+    formData.patient = patient.documentId
+    formData.patientName = patient.Name
+    lockedPatientData.value = patient // ✅ 存下完整对象，备用
   } else {
     isPatientLocked.value = false
   }
@@ -117,35 +122,85 @@ const handleSubmit = async () => {
       try {
         let imageIds: number[] = []
 
-        // A. 处理图片上传
-        if (uploaderRef.value) {
-          imageIds = await uploaderRef.value.submitAll()
+        // ==========================================
+        // 🟢 核心修复：精准获取当前选中的患者对象
+        // ==========================================
+        let currentPatient: Patient | undefined
+
+        if (isPatientLocked.value) {
+          // 锁定模式：直接使用 open 时存下的对象
+          currentPatient = lockedPatientData.value!
+        } else {
+          // 搜索模式：去下拉选项数组里找对应的 ID
+          currentPatient = patientOptions.value.find(
+            p => p.documentId === formData.patient
+          )
         }
 
-        // B. 构建提交数据
+        // ==========================================
+        // 🟢 文件名组装逻辑 (Name + Gender + DOB)
+        // ==========================================
+        let filePrefix = ''
+        
+        if (currentPatient) {
+          // 1. 姓名转拼音 (李四 -> LiSi)
+          // 这种格式既保留了语义，又完美通过 Strapi 的安全检查，NAS 也能完美识别
+          const nameStr = currentPatient.Name || 'Unknown'
+          const namePinyin = pinyin(nameStr, { 
+            toneType: 'none', // 去声调
+            type: 'array',    //以此方便处理大小写
+            v: true           // ü 转 v
+          }).join('')
+          
+          // 2. 性别：直接使用原始值，去繁就简
+          // 后端数据: 'male' / 'female' -> 文件名: 'Male' / 'Female'
+          const rawGender = currentPatient.Gender || 'unknown'
+          const gender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1)
+          
+          // 3. 处理生日 (格式化为 19900101)
+          const birthday = currentPatient.Birthday 
+            ? dayjs(currentPatient.Birthday).format('YYYYMMDD') 
+            : '00000000'
+
+          // 4. 处理本次治疗日期
+          const today = dayjs().format('YYYYMMDD')
+          
+          // 5. 处理部位 (将英文 value 转为中文 label，或者直接用英文)
+          // 如果你想用中文，需要引入 TARGET_OPTIONS 并查找
+          // 这里为了文件系统兼容性，建议暂时用 formData.target (英文)，或者你自己转中文
+          const target = formData.target || 'Target'
+
+          // 📝 最终格式：20251230_张三_男_19900101_face
+          filePrefix = `${today}_${namePinyin}_${gender}_${birthday}_${target}`
+        } else {
+          // 兜底：万一找不到患者对象（理论上 validate 过了不会发生）
+          filePrefix = `Unknown_${dayjs().format('YYYYMMDD')}`
+        }
+
+        console.log('📄 生成的文件名前缀:', filePrefix)
+
+        // A. 执行上传 (传入前缀)
+        if (uploaderRef.value) {
+          imageIds = await uploaderRef.value.submitAll(filePrefix)
+        }
+
+        // B. 构建提交数据 (保持不变)
         const submitData = {
           patient: formData.patient,
           target: formData.target,
           sequence_number: formData.sequence_number,
-          duration: formData.duration, // ✅ 包含时长字段
+          duration: formData.duration,
           Images: imageIds
         }
 
-        console.log('📡 新建治疗 Payload:', submitData)
-
-        // C. API 调用
         await createTreatment(submitData)
-
         ElMessage.success('治疗记录创建成功')
         visible.value = false
-        
-        // D. 通知父组件刷新
         emit('success')
         
       } catch (error: any) {
         console.error(error)
-        const errorMsg = error.response?.data?.error?.message || '创建失败，请重试'
-        ElMessage.error(errorMsg)
+        ElMessage.error(error.message || '操作失败')
       } finally {
         formLoading.value = false
       }

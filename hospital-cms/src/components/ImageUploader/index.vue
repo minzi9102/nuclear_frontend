@@ -182,16 +182,26 @@ const selectImage = (index: number) => {
 }
 
 // 4. 批量上传 (暴露给父组件)
-const submitAll = async (): Promise<number[]> => {
+const submitAll = async (namingPrefix?: string): Promise<number[]> => {
   if (localFileList.value.length === 0) return []
 
   console.log('🚀 [批量上传] 开始...')
   
-  const uploadPromises = localFileList.value.map(async (item) => {
+  const uploadPromises = localFileList.value.map(async (item, index) => {
     try {
-      // item.raw 经过了 Compressor 或 Canvas 处理，一定是一个标准的 File 对象
-      const res = await uploadFile(item.raw)
-      console.log(`✅ 图片 ${item.name} 上传成功 ID: ${res.id}`)
+      // 构造语义化文件名
+      // 格式：前缀_序号.jpg (例如：张三_20251230_Face_01.jpg)
+      let customName = undefined;
+      if (namingPrefix) {
+        // 补零逻辑：1 -> 01
+        const seq = (index + 1).toString().padStart(2, '0');
+        // 保持原有扩展名 (jpeg)
+        customName = `${namingPrefix}_${seq}.jpg`;
+      }
+
+      // 传入 customName
+      const res = await uploadFile(item.raw, customName)
+      console.log(`✅ 图片 ${customName || item.name} 上传成功 ID: ${res.id}`)
       return res.id
     } catch (error) {
       console.error(`❌ 文件 ${item.name} 上传失败`, error)
