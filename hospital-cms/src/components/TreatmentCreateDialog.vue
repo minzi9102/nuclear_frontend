@@ -3,6 +3,7 @@ import { ref, reactive, nextTick, computed } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import dayjs from 'dayjs' // 建议引入 dayjs 处理日期，或用原生 Date
 import { pinyin } from 'pinyin-pro'
+import { User } from '@element-plus/icons-vue'
 
 // 组件引入
 import ImageUploader from '../components/ImageUploader/index.vue'

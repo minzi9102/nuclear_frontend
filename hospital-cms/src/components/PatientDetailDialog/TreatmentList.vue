@@ -34,7 +34,7 @@
         </template>
 
         <div class="collapse-body">
-          <TreatmentImages :images="treatment.Images" />
+          <TreatmentImages :images="treatment.Images || []" />
         </div>
       </el-collapse-item>
     </el-collapse>

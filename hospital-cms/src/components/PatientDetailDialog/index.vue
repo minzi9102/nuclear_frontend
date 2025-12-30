@@ -43,7 +43,7 @@
         :treatment-count="patientData.treatments?.length || 0" 
       />
 
-      <TreatmentList :treatments="patientData.treatments" />
+      <TreatmentList :treatments="patientData.treatments || []" />
     </div>
 
     <TreatmentCreateDialog ref="treatmentCreateRef" @success="onTreatmentCreated" />
