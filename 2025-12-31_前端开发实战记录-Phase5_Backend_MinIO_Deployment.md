@@ -60,7 +60,7 @@ baseUrl: `${env('NAS_ENDPOINT')}/${env('NAS_BUCKET')}` // 强制修正 URL
 
 ````
 
-# Phase 5: 后端 (Strapi) 连接 NAS 并搭建 MinIO 对象存储 [2025/12/31]
+# Phase 5: 后端 (Strapi) 连接 NAS 并搭建 MinIO 对象存储 [2025/12/30]
 
 ## 概述
 
@@ -285,4 +285,40 @@ module.exports = ({ env }) => ({
 
 **状态**：✅ 已完成（Docker 部署成功，后端上传/读取链路已打通）
 
-**最后更新**：2025-12-31 23:55
+
+Dev Context Snapshot [2025/12/31 16:35]
+1. 核心任务与状态
+
+    当前目标: 暂停 Strapi 后端与 NAS MinIO 的连接，回退至本地文件存储模式。
+
+    当前状态: 已完成 (Local Mode)
+
+    关键文件:
+
+        config/plugins.ts: 已注释 upload (aws-s3) 配置块，恢复默认本地上传逻辑。
+
+2. 本次会话变动 (Changelog)
+
+    [配置变更] 在 config/plugins.ts 中注释掉 @strapi/provider-upload-aws-s3 相关代码。
+
+    [架构调整] 存储后端从 NAS MinIO (192.168.1.215:9090) 切换回本地 public/uploads。
+
+    [验证] 确认新上传文件路径为相对路径 (/uploads/xxx.jpg)，且物理文件存于本地磁盘。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    NOTE: 数据库中历史数据 (Old Media) 仍指向 NAS URL (http://192.168.1.215:9090/...)。在 Local 模式下，这些旧文件可读取 (若 NAS 在线)，但无法通过 Strapi 后台删除。
+
+    TODO: 若需恢复 NAS 存储，需取消 config/plugins.ts 注释并重启服务。
+
+    INFO: NAS 端 Docker 容器及 cms 共享文件夹数据保持原样，未受影响。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Strapi v5.32.0, Node.js v22, MinIO (Docker on Infortrend NAS).
+
+    Config (Inactive):
+
+        .env 中仍保留 NAS_ACCESS_KEY, NAS_ENDPOINT 等变量。
+
+        被注释的逻辑包含 baseUrl 强制拼接: ${env('NAS_ENDPOINT')}/${env('NAS_BUCKET')}。

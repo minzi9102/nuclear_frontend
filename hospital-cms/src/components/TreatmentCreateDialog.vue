@@ -102,7 +102,7 @@ const searchPatients = async (query: string) => {
     try {
       const res: any = await getPatientList({
         'filters[Name][$contains]': query,
-        'pagination[limit]': 10
+        'pagination[limit]': 10,
       } as any)
       patientOptions.value = res.data?.data || res.data || []
     } catch (error) {
