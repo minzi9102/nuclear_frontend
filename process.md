@@ -1390,3 +1390,64 @@ Dev Context Snapshot [2025/12/30 18:55]
     Tech Stack: Vue 3, TypeScript, Element Plus, Strapi v5.
 
     Data Context: Strapi v5 的 Media 字段在无数据时返回 null 而非 []，前端必须做空值合并处理。
+
+# Dev Context Snapshot [2025/12/30 23:55]
+
+## 1. 核心任务与状态
+
+**当前目标**: 在 Infortrend NAS 部署 MinIO 私有对象存储，并完成 Strapi 后端对接。
+
+**当前状态**: 已完成 (Docker 部署成功，后端上传/读取链路已打通)。
+
+**关键文件**:
+- `config/plugins.ts`: 修正 module.exports 语法，配置 aws-s3 provider，强制指定 baseUrl。
+- `config/middlewares.ts`: 更新 CSP 策略 (img-src, media-src) 允许 NAS IP。
+- `.env`: 配置 NAS MinIO 凭证、Endpoint 及 Bucket。
+
+## 2. 本次会话变动 (Changelog)
+
+### [Infra] 部署 MinIO 容器
+- **镜像**: minio/minio (离线加载)
+- **端口映射**: Host 9090 -> Container 9000 (API); Host 9091 -> Container 9001 (Console)
+- **存储卷**: NAS 共享文件夹 cms (SMB) -> 容器 /data
+- **修复**: NAS 系统时间与客户端偏差导致的 RequestTimeTooSkewed 错误
+
+### [Config] 修复 config/plugins.ts 语法错误
+- 从 `module.exports = (env) => ...` (错误) 修正为 `module.exports = ({ env }) => ...` (解构赋值)
+- 解决 Missing credentials 问题
+
+### [Fix] 修复前端图片 URL 生成问题
+- **问题 1**: 生成的 URL 缺少端口号 (:9090)
+- **问题 2**: 指定 baseUrl 为 Endpoint 后缺少 Bucket 路径
+- **解决**: 在 providerOptions 中显式拼接 `baseUrl: ${env('NAS_ENDPOINT')}/${env('NAS_BUCKET')}`
+
+### [Security] 设置 MinIO Bucket 权限
+- 将 hospital-cms-storage Bucket 权限设置为 Public，解决 AccessDenied
+
+## 3. 挂起的任务与已知问题 (CRITICAL)
+
+**TODO**: 清理脏数据。数据库中残留了调试期间产生的错误图片记录（缺少端口或路径重复），需在 Strapi Admin 中手动删除，否则前端会显示裂图。
+
+**Note**: 只有新上传的图片才会应用最新的 baseUrl 规则。
+
+## 4. 环境与依赖上下文
+
+**Tech Stack**: Strapi v5.32.0, Node.js v22, Docker (on Infortrend NAS)
+
+**Dependency**: @strapi/provider-upload-aws-s3 installed
+
+**Key Config Snapshot**:
+
+```typescript
+// .env
+NAS_ENDPOINT=http://192.168.1.215:9090  # 必须带端口，无 Bucket 后缀
+NAS_BUCKET=hospital-cms-storage
+NAS_REGION=us-east-1
+
+// config/plugins.ts
+s3Options: {
+  endpoint: env('NAS_ENDPOINT'),
+  forcePathStyle: true,
+},
+baseUrl: `${env('NAS_ENDPOINT')}/${env('NAS_BUCKET')}` // 强制修正 URL
+```
