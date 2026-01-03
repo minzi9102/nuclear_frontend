@@ -4,13 +4,23 @@ import qs from 'qs'
 
 // 获取治疗记录列表
 export const getTreatmentList = (params: TreatmentQueryParams) => {
-  return request.get<any, ApiResponse<Treatment>>('/treatments', {
-    params: {
-      ...params,
-      // 🔥 核心魔法：告诉 Strapi 把关联的 patient 信息也查出来
-      populate: ['patient', 'Images'] 
+  // 构建深度查询对象
+  const queryObj = {
+    ...params,
+    populate: {
+      patient: true,          // 关联患者
+      Images: true,           // 兼容旧数据的图片
+      // ✨ 新增：深度 Populate 组件及其内部图片
+      details: {
+        populate: 'photos'
+      }
     }
-  })
+  }
+
+  // 使用 qs.stringify 处理嵌套对象，避免 Strapi 解析失败
+  const queryString = qs.stringify(queryObj, { encodeValuesOnly: true })
+
+  return request.get<any, ApiResponse<Treatment>>(`/treatments?${queryString}`)
 }
 
 // 删除治疗记录
@@ -31,7 +41,13 @@ export const updateTreatment = (documentId: string, data: any) => {
 // 获取单条治疗记录详情（包含图片）
 export const getTreatmentDetail = (documentId: string) => {
   const query = qs.stringify({
-    populate: '*' // 🔥 关键：获取所有关联字段（包括 Images）
+    populate: {
+      patient: true,
+      Images: true, // 兼容旧数据
+      details: {
+        populate: 'photos' // 获取组件内的图片
+      }
+    }
   }, { encodeValuesOnly: true })
 
   return request.get<any, { data: Treatment }>(`/treatments/${documentId}?${query}`)

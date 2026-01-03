@@ -8,7 +8,7 @@ import TreatmentCreateDialog from '../../components/TreatmentCreateDialog.vue'
 
 // API 引入
 import { getTreatmentList, deleteTreatment } from '../../api/treatment'
-import type { Treatment, StrapiMedia } from '../../api/types'
+import type { Treatment, StrapiMedia, LesionDetail } from '../../api/types'
 
 // 常量引入
 import { TREATMENT_TARGET_MAP } from '../../constants/treatment';
@@ -42,6 +42,26 @@ const getThumbnailUrl = (img: StrapiMedia | undefined) => {
   return url.startsWith('http') ? url : `${BASE_URL}${url}`
 }
 
+/**
+ * 📷 获取某条记录的所有图片（兼容新旧结构）
+ * 优先从 details 组件中提取所有图片，如果没有则取旧的 Images 字段
+ */
+const getTreatmentImages = (row: Treatment): StrapiMedia[] => {
+  // 1. 尝试从新结构 details 中提取
+  if (row.details && row.details.length > 0) {
+    const allPhotos: StrapiMedia[] = []
+    row.details.forEach(detail => {
+      if (detail.photos && detail.photos.length > 0) {
+        allPhotos.push(...detail.photos)
+      }
+    })
+    if (allPhotos.length > 0) return allPhotos
+  }
+  
+  // 2. 回退到旧结构 Images
+  return row.Images || []
+}
+
 // --- 核心逻辑 ---
 
 // 1. 获取列表
@@ -51,7 +71,14 @@ const fetchData = async () => {
     const apiParams: any = {
       'pagination[page]': queryParams.page,
       'pagination[pageSize]': queryParams.pageSize,
-      populate: ['patient', 'Images'], 
+      // 🟢 核心修改：深度 Populate 以获取 details 组件及其图片
+      populate: {
+        patient: true,
+        Images: true, // 兼容旧数据
+        details: {
+          populate: 'photos'
+        }
+      },
       sort: 'createdAt:desc',
     }
     if (queryParams.treatmentNo) {
@@ -136,15 +163,17 @@ onUnmounted(() => {
           
           <el-table-column label="影像资料" width="120">
             <template #default="{ row }">
-              <div v-if="row.Images && row.Images.length > 0" style="display: flex; align-items: center;">
+              <div v-if="getTreatmentImages(row).length > 0" style="display: flex; align-items: center;">
                 <el-image 
                   style="width: 40px; height: 40px; border-radius: 4px; margin-right: 5px;"
-                  :src="getThumbnailUrl(row.Images[0])"
-                  :preview-src-list="row.Images.map((img: StrapiMedia) => getThumbnailUrl(img).replace('thumbnail_', ''))"
+                  :src="getThumbnailUrl(getTreatmentImages(row)[0])"
+                  :preview-src-list="getTreatmentImages(row).map(img => getThumbnailUrl(img).replace('thumbnail_', ''))"
                   preview-teleported
                   fit="cover"
                 />
-                <span v-if="row.Images.length > 1" style="font-size: 12px; color: #909399;">+{{ row.Images.length - 1 }}</span>
+                <span v-if="getTreatmentImages(row).length > 1" style="font-size: 12px; color: #909399;">
+                  +{{ getTreatmentImages(row).length - 1 }}
+                </span>
               </div>
               <span v-else style="color: #dcdfe6;">-</span>
             </template>
@@ -159,7 +188,15 @@ onUnmounted(() => {
 
           <el-table-column label="部位">
             <template #default="{ row }">
-              {{ TREATMENT_TARGET_MAP[row.target] || row.target }}
+              <div v-if="row.details && row.details.length > 0" class="flex-tags">
+                 <el-tag v-for="detail in row.details" :key="detail.id" size="small" type="success" style="margin-right: 4px;">
+                   {{ TREATMENT_TARGET_MAP[detail.part] || detail.part }}
+                 </el-tag>
+              </div>
+              <div v-else-if="row.target">
+                 {{ TREATMENT_TARGET_MAP[row.target] || row.target }}
+              </div>
+              <span v-else class="text-gray-300">-</span>
             </template>
           </el-table-column>
 
@@ -198,17 +235,20 @@ onUnmounted(() => {
             <div class="card-body">
               <div class="img-wrapper">
                  <el-image 
-                  v-if="item.Images && item.Images.length > 0"
+                  v-if="getTreatmentImages(item).length > 0"
                   class="mobile-thumb"
-                  :src="getThumbnailUrl(item.Images[0])"
-                  :preview-src-list="item.Images.map((img: StrapiMedia) => getThumbnailUrl(img).replace('thumbnail_', ''))"
+                  :src="getThumbnailUrl(getTreatmentImages(item)[0])"
+                  :preview-src-list="getTreatmentImages(item).map(img => getThumbnailUrl(img).replace('thumbnail_', ''))"
                   preview-teleported
                   fit="cover"
                 >
                   <template #error><div class="img-placeholder">无图</div></template>
                 </el-image>
                 <div v-else class="img-placeholder">无图</div>
-                <div v-if="item.Images && item.Images.length > 1" class="img-count">+{{ item.Images.length }}</div>
+                
+                <div v-if="getTreatmentImages(item).length > 1" class="img-count">
+                  +{{ getTreatmentImages(item).length }}
+                </div>
               </div>
 
               <div class="info-wrapper">
@@ -219,7 +259,17 @@ onUnmounted(() => {
                 </div>
                 <div class="info-row">
                   <span class="label">部位:</span>
-                  <span class="value">{{ TREATMENT_TARGET_MAP[item.target] || item.target }}</span>
+                  <div class="value">
+                    <template v-if="item.details && item.details.length > 0">
+                      <span v-for="(d, idx) in item.details" :key="idx">
+                        {{ TREATMENT_TARGET_MAP[d.part] || d.part }}
+                        <span v-if="idx < item.details.length - 1">, </span>
+                      </span>
+                    </template>
+                    <template v-else>
+                      {{ item.target ? (TREATMENT_TARGET_MAP[item.target] || item.target) : '-' }}
+                    </template>
+                  </div>
                 </div>
               </div>
             </div>
@@ -379,6 +429,8 @@ onUnmounted(() => {
 .info-row .value {
   color: #606266;
   font-weight: 500;
+  /* 增加这一行，防止多部位文本过长 */
+  word-break: break-all; 
 }
 .info-row .value.link { color: #409EFF; }
 .info-row .value.warning { color: #E6A23C; }
@@ -412,5 +464,12 @@ onUnmounted(() => {
 .pagination-container.is-mobile {
   justify-content: center;
   margin-top: 15px;
+}
+
+/* PC端 Tag 容器 */
+.flex-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 </style>

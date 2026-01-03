@@ -43,17 +43,34 @@ export interface PatientQueryParams {
  */
 export type TreatmentTarget = keyof typeof TREATMENT_TARGET_MAP;
 
+
+// ✨ 新增：病灶详情组件 (对应的 Strapi Component: treatment.lesion-record)
+export interface LesionDetail {
+  id: number;
+  part: TreatmentTarget;       // 部位 (复用之前的类型)
+  duration?: number | null;    // 特例时长 (允许为空，为空时使用父级时长)
+  photos: StrapiMedia[];       // 该部位对应的图片
+  notes?: string;              // 备注 (可选)
+}
+
 // 治疗记录实体
 export interface Treatment {
   id: number;
   documentId: string;
-  treatmentNo: string;        // 治疗编号
-  target: TreatmentTarget;    // 治疗部位 (已关联强类型)
-  sequence_number: number;    // 序号
-  duration?: number; // 使用 ? 设为可选，兼容旧数据
+  treatmentNo: string;
+  sequence_number: number;
   createdAt: string;
-  patient?: Patient;          // 关联的患者信息
-  Images?: StrapiMedia[];     // 关联的图片数组 
+  patient?: Patient;
+
+  // --- 核心字段变更 ---
+  duration: number;            // ✅ 语义变为：基准时长 (Base Duration)
+  
+  // 🆕 新结构：多病灶详情
+  details?: LesionDetail[];    
+  
+  // 🏚️ 旧结构兼容 (不要删除，用于显示历史数据)
+  target?: TreatmentTarget;    
+  Images?: StrapiMedia[];      
 }
 
 // 治疗记录查询参数

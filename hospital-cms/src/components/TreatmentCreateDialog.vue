@@ -29,6 +29,7 @@ const visible = ref(false)
 const formLoading = ref(false)
 const formRef = ref<FormInstance>()
 const uploaderRef = ref<InstanceType<typeof ImageUploader> | null>(null)
+const uploaderRefs = ref<Map<number, any>>(new Map())
 
 // 选项数据
 const targetOptions = TARGET_OPTIONS
@@ -48,11 +49,15 @@ const isMobile = computed(() => width.value < 768)
 
 // 表单模型
 const formData = reactive({
-  patient: '' as string, // 存储 documentId
-  patientName: '' as string, // 仅用于显示（当锁定病人时）
-  target: '',
+  patient: '' as string,
+  patientName: '' as string,
   sequence_number: undefined as number | undefined,
-  duration: 0.5, // 默认给 0.5 小时，方便操作
+  base_duration: 48, // ✅ 基准时长
+  
+  // ✅ 动态数组
+  lesions: [
+    { key: Date.now(), part: '', notes: '', duration: undefined as number | undefined }
+  ]
 })
 
 const rules = {
@@ -62,6 +67,28 @@ const rules = {
 
 // --- 核心方法 ---
 
+// 1. 动态 Ref 绑定器
+const setUploaderRef = (el: any, index: number) => {
+  if (el) {
+    uploaderRefs.value.set(index, el)
+  }
+}
+
+// 2. 增删病灶
+const addLesion = () => {
+  formData.lesions.unshift({
+    key: Date.now(), // 用时间戳做唯一 key，防止渲染错乱
+    part: '', 
+    notes: '',
+    duration: undefined 
+  })
+}
+
+const removeLesion = (index: number) => {
+  formData.lesions.splice(index, 1)
+  // 注意：Map 中的 Ref 不需要手动清理，Vue 更新 DOM 时会自动处理
+}
+
 /**
  * 打开弹窗的方法（供父组件调用）
  * @param patient 传入完整的患者对象 (包含 Name, Gender, Birthday)
@@ -69,10 +96,11 @@ const rules = {
 const open = (patient?: Patient) => {
   // 1. 重置表单
   formData.patient = ''
-  formData.patientName = ''
-  formData.target = '' 
+  formData.patientName = '' 
   formData.sequence_number = undefined
-  formData.duration = 48
+  formData.base_duration = 48
+  formData.lesions = [{ key: Date.now(), part: '', notes: '', duration: undefined }] // 恢复默认一行
+  uploaderRefs.value.clear() // 清空引用
 
   patientOptions.value = []
   lockedPatientData.value = null // 重置
@@ -121,10 +149,8 @@ const handleSubmit = async () => {
     if (valid) {
       formLoading.value = true
       try {
-        let imageIds: number[] = []
-
         // ==========================================
-        // 🟢 核心修复：精准获取当前选中的患者对象
+        // 1. 获取当前选中的患者对象
         // ==========================================
         let currentPatient: Patient | undefined
 
@@ -138,63 +164,94 @@ const handleSubmit = async () => {
           )
         }
 
+        // 🛡️ 防御性编程：如果没找到 currentPatient (理论不该发生)，给个默认兜底
+        if (!currentPatient) {
+            console.warn('未找到匹配的患者信息，将使用默认文件名规则');
+        }
+
         // ==========================================
-        // 🟢 文件名组装逻辑 (Name + Gender + DOB)
+        // 2. 生成基础文件名前缀 (Base Prefix)
+        // 格式: 20251230_LiSi_Male_19900101
         // ==========================================
-        let filePrefix = ''
+        let baseFilePrefix = ''
         
         if (currentPatient) {
-          // 1. 姓名转拼音 (李四 -> LiSi)
-          // 这种格式既保留了语义，又完美通过 Strapi 的安全检查，NAS 也能完美识别
+          // 2.1 姓名转拼音
           const nameStr = currentPatient.Name || 'Unknown'
           const namePinyin = pinyin(nameStr, { 
-            toneType: 'none', // 去声调
-            type: 'array',    //以此方便处理大小写
-            v: true           // ü 转 v
+            toneType: 'none', 
+            type: 'array',    
+            v: true           
           }).join('')
           
-          // 2. 性别：直接使用原始值，去繁就简
-          // 后端数据: 'male' / 'female' -> 文件名: 'Male' / 'Female'
+          // 2.2 性别
           const rawGender = currentPatient.Gender || 'unknown'
           const gender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1)
           
-          // 3. 处理生日 (格式化为 19900101)
+          // 2.3 生日
           const birthday = currentPatient.Birthday 
             ? dayjs(currentPatient.Birthday).format('YYYYMMDD') 
             : '00000000'
 
-          // 4. 处理本次治疗日期
+          // 2.4 治疗日期
           const today = dayjs().format('YYYYMMDD')
           
-          // 5. 处理部位 (将英文 value 转为中文 label，或者直接用英文)
-          // 如果你想用中文，需要引入 TARGET_OPTIONS 并查找
-          // 这里为了文件系统兼容性，建议暂时用 formData.target (英文)，或者你自己转中文
-          const target = formData.target || 'Target'
-
-          // 📝 最终格式：20251230_张三_男_19900101_face
-          filePrefix = `${today}_${namePinyin}_${gender}_${birthday}_${target}`
+          // 组合基础部分 (注意：这里还没加部位)
+          baseFilePrefix = `${today}_${namePinyin}_${gender}_${birthday}`
         } else {
-          // 兜底：万一找不到患者对象（理论上 validate 过了不会发生）
-          filePrefix = `Unknown_${dayjs().format('YYYYMMDD')}`
+          baseFilePrefix = `Unknown_${dayjs().format('YYYYMMDD')}`
         }
 
-        console.log('📄 生成的文件名前缀:', filePrefix)
+        // ==========================================
+        // 3. 循环处理每个病灶 (核心变更)
+        // ==========================================
+        const detailsPayload = []
 
-        // A. 执行上传 (传入前缀)
-        if (uploaderRef.value) {
-          imageIds = await uploaderRef.value.submitAll(filePrefix)
+        // 遍历 formData.lesions 数组
+        for (const [index, lesion] of formData.lesions.entries()) {
+          // A. 获取该行对应的上传组件实例
+          const uploader = uploaderRefs.value.get(index)
+          let imageIds: number[] = []
+
+          // B. 如果有上传组件，执行上传
+          if (uploader) {
+            // 📝 最终文件名：基础前缀 + 当前部位
+            // 例: 20251230_LiSi_Male_19900101_Face
+            // 这里的 lesion.part 建议首字母大写，或者直接用 raw string
+            const specificSuffix = `${baseFilePrefix}_${lesion.part || 'Part'}`
+            
+            // 执行上传并获取 ID 数组
+            imageIds = await uploader.submitAll(specificSuffix)
+          }
+
+          // C. 组装 Strapi Component 数据结构
+          detailsPayload.push({
+            part: lesion.part,
+            duration: lesion.duration, // 允许 undefined (继承父级)
+            photos: imageIds,           // 关联刚刚上传的图片 ID
+            notes: lesion.notes         // 备注信息
+          })
         }
 
-        // B. 构建提交数据 (保持不变)
+        // ==========================================
+        // 4. 构建 Strapi v5 提交数据
+        // ==========================================
         const submitData = {
           patient: formData.patient,
-          target: formData.target,
           sequence_number: formData.sequence_number,
-          duration: formData.duration,
-          Images: imageIds
+          duration: formData.base_duration, // ✅ 存入基准时长
+          
+          // ✅ 写入 details 组件数组
+          details: detailsPayload 
+          
+          // ❌ 移除旧字段 target 和 Images
         }
 
+        // ==========================================
+        // 5. 发送请求
+        // ==========================================
         await createTreatment(submitData)
+        
         ElMessage.success('治疗记录创建成功')
         visible.value = false
         emit('success')
@@ -237,24 +294,18 @@ defineExpose({ open })
     <el-form 
       ref="formRef" 
       :model="formData" 
-      :rules="rules" 
       :label-width="isMobile ? 'auto' : '100px'"
       :label-position="isMobile ? 'top' : 'right'"
     >
       
-      <el-form-item label="关联患者" prop="patient">
-        <el-input 
-          v-if="isPatientLocked" 
-          :model-value="formData.patientName" 
-          disabled 
-          placeholder="已锁定当前患者"
-        >
-          <template #prefix>
-            <el-icon><User /></el-icon>
-          </template>
-        </el-input>
-
-        <el-select
+      <div class="section-block">
+        <h4 class="section-title">基础信息</h4>
+        
+        <el-form-item label="关联患者" prop="patient" :rules="[{ required: true, message: '请选择患者' }]">
+          <el-input v-if="isPatientLocked" :model-value="formData.patientName" disabled placeholder="已锁定当前患者">
+             <template #prefix><el-icon><User /></el-icon></template>
+           </el-input>
+           <el-select
           v-else
           v-model="formData.patient"
           filterable
@@ -265,60 +316,95 @@ defineExpose({ open })
           :loading="patientLoading"
           style="width: 100%"
         >
-          <el-option
+        <el-option
             v-for="item in patientOptions"
             :key="item.documentId"
             :label="`${item.Name} (${item.Gender === 'male' ? '男' : '女'})`"
             :value="item.documentId"
           />
-        </el-select>
+          </el-select>
       </el-form-item>
 
-      <el-row :gutter="20">
-        <el-col :xs="24" :sm="12">
-          <el-form-item label="治疗部位" prop="target">
-            <el-select v-model="formData.target" placeholder="请选择治疗部位" style="width: 100%">
-              <el-option 
-                v-for="item in targetOptions" 
-                :key="item.value" 
-                :label="item.label" 
-                :value="item.value" 
+        <el-row :gutter="20">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="默认时长" prop="base_duration" :rules="[{ required: true, message: '请填写默认时长' }]">
+               <el-input-number 
+                 v-model="formData.base_duration" 
+                 :min="1" :step="1" :precision="0" 
+                 style="width: 100%"
+               >
+                 <template #suffix>小时</template>
+               </el-input-number>
+            </el-form-item>
+          </el-col>
+           <el-col :xs="24" :sm="12">
+             <el-form-item label="手动序号" prop="sequence_number">
+                <el-input-number v-model="formData.sequence_number" placeholder="自动生成" style="width: 100%" />
+             </el-form-item>
+           </el-col>
+        </el-row>
+      </div>
+
+      <div class="section-block">
+        <div class="flex-row-between">
+          <h4 class="section-title">病灶详情 ({{ formData.lesions.length }})</h4>
+          <el-button type="primary" link icon="Plus" @click="addLesion">添加部位</el-button>
+        </div>
+
+        <TransitionGroup name="list" tag="div" style="position: relative;">
+        <div v-for="(lesion, index) in formData.lesions" :key="lesion.key" class="lesion-card">
+          <div class="lesion-header">
+            <span class="index-badge">#{{ formData.lesions.length - index }}</span>
+            <el-button v-if="formData.lesions.length > 1" type="danger" link icon="Delete" @click="removeLesion(index)">移除</el-button>
+          </div>
+          
+          <el-row :gutter="20">
+            <el-col :xs="24" :sm="12">
+              <el-form-item 
+                label="治疗部位" 
+                :prop="`lesions.${index}.part`"
+                :rules="[{ required: true, message: '必选', trigger: 'change' }]"
+              >
+                <el-select v-model="lesion.part" placeholder="选择部位" style="width: 100%">
+                   <el-option v-for="op in targetOptions" :key="op.value" :label="op.label" :value="op.value" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12">
+              <el-form-item label="特殊时长" :prop="`lesions.${index}.duration`">
+                 <el-input-number 
+                   v-model="lesion.duration" 
+                   :placeholder="`同上 (${formData.base_duration})`"
+                   :min="0.1" :step="0.5" 
+                   style="width: 100%" 
+                   controls-position="right"
+                 />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-form-item label="备注" class="mt-2" :prop="`lesions.${index}.notes`">
+              <el-input 
+                  v-model="lesion.notes" 
+                  placeholder="例如：能量参数、特殊说明..." 
+                  type="textarea" 
+                  :rows="1"
+                  resize="none"
               />
-            </el-select>
           </el-form-item>
-        </el-col>
 
-        <el-col :xs="24" :sm="12">
-          <el-form-item label="治疗时长" prop="duration">
-            <el-input-number 
-              v-model="formData.duration" 
-              :min="1" 
-              :step="1" 
-              :precision="0"
-              controls-position="right"
-              style="width: 100%"
-            >
-              <template #suffix>小时</template>
-            </el-input-number>
+          <el-form-item label="影像记录" required>
+            <image-uploader 
+              :ref="(el) => setUploaderRef(el, index)" 
+              :limit="9" 
+            />
           </el-form-item>
-        </el-col>
-      </el-row>
-
-      <el-form-item label="治疗影像">
-        <image-uploader ref="uploaderRef" :limit="9" />
-      </el-form-item>
-
-      <el-form-item label="手动序号" prop="sequence_number">
-        <el-input-number 
-          v-model="formData.sequence_number" 
-          :min="1" 
-          placeholder="留空自动生成" 
-          style="width: 100%" 
-        />
-        <div class="tips">通常无需填写，系统会自动计算是第几次治疗。</div>
-      </el-form-item>
+        </div>
+      </TransitionGroup>
+      </div>
 
     </el-form>
+    
 
     <template #footer>
       <div class="dialog-footer">
@@ -358,6 +444,40 @@ defineExpose({ open })
     padding-left: 10px;
     padding-right: 40px; /* 给右侧按钮留空间 */
   }
+}
+.section-block { margin-bottom: 20px; }
+.section-title { margin-bottom: 10px; font-weight: bold; border-left: 3px solid var(--el-color-primary); padding-left: 8px; }
+.flex-row-between { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; margin-top: -30px;}
+.lesion-card { background: #f5f7fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; }
+.lesion-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.index-badge { background: #e6e8eb; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #606266; }
+.list-move, 
+.list-enter-active{
+  transition: all 0.5s cubic-bezier(0.55, 0, 0.1, 1);
+}
+.list-leave-active {
+  transition: all 0.3s linear;
+}
+
+/* 🟢 进入时的状态：从上方滑入 */
+.list-enter-from {
+  opacity: 0;
+  transform: translateY(-30px); 
+}
+
+/* 3. 🟢 离开状态：向上滑出并消失 (修改了这里) */
+.list-leave-to {
+  opacity: 0;
+  /* 核心修改：改为负值，让它向上飘走，而不是缩小 */
+  transform: translateY(30px); 
+}
+
+/* 🟢 核心魔法：离开的元素必须脱离文档流 */
+.list-leave-active {
+  position: absolute; /* 让它悬浮，不再占据空间 */
+  width: 100%;        /* 强制保持宽度，防止内容变形 */
+  left: 0;            /* 确保对齐 */
+  z-index: -1;        /* 让它退到后面，不要遮挡正在向上移动的元素 */
 }
 </style>
 

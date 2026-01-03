@@ -2,8 +2,6 @@ import request from '../utils/request'
 import qs from 'qs' // 引入 qs 库处理 Strapi 复杂查询参数
 import type { ApiResponse, Patient, PatientQueryParams } from './types'
 
-// 获取患者列表 (增强版：包含关联的治疗记录)
-// 获取患者列表 (修复分页报错版)
 export const getPatientList = (params: PatientQueryParams) => {
   const { page, pageSize, ...restParams } = params
 
@@ -11,8 +9,18 @@ export const getPatientList = (params: PatientQueryParams) => {
   // 这是给首页卡片列表用的，防止加载太慢
   const defaultPopulate = {
     treatments: {
-      fields: ['treatmentNo', 'target', 'createdAt', 'documentId'],
-      sort: ['createdAt:desc']
+      fields: ['treatmentNo', 'target', 'createdAt', 'documentId', 'duration'], // 加上 duration
+      sort: ['createdAt:desc'],
+      populate: {
+        // 1. 获取新结构：多病灶详情
+        details: {
+          populate: ['photos'] // 必须显式 populate 组件内的媒体字段
+        },
+        // 2. 兼容旧结构：获取顶层图片
+        Images: {
+          fields: ['url', 'width', 'height', 'formats', 'name']
+        }
+      }
     }
   }
 
@@ -32,11 +40,6 @@ export const getPatientList = (params: PatientQueryParams) => {
 
     // 展开剩余参数 (filters 等)
     ...restParams,
-  }
-
-  // 4. 清理：因为 populate 已经被手动处理了，避免 restParams 里重复的 populate 干扰 (虽然 qs 会处理，但这样更干净)
-  if (restParams.populate) {
-      delete (queryObject as any).populate_backup // 这一步其实不用写，上面的逻辑已经涵盖
   }
 
   const queryString = qs.stringify(queryObject, {

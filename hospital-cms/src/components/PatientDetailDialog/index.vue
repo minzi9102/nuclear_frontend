@@ -87,10 +87,7 @@ const open = async (documentId: string) => {
 
   try {
     const res: any = await getPatientList({
-      filters: { documentId: { $eq: documentId } },
-      populate: {
-        treatments: { populate: 'Images', sort: 'createdAt:desc' }
-      }
+      filters: { documentId: { $eq: documentId } }
     } as any)
 
     let data = null
