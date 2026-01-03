@@ -1584,3 +1584,40 @@ Dev Context Snapshot [2026/01/03 18:15]
         Field: details (Component: treatment.lesion-record, Repeatable)
 
         Sub-fields: part (Enum), photos (Media), notes (Text), duration (Int)
+
+Dev Context Snapshot [2026/01/03 18:45]
+1. 核心任务与状态
+
+    当前目标: 完成治疗记录列表页 (Treatment List) 对“多病灶 (Multi-Lesion)”数据结构的 UI 适配 (PC/Mobile 双端)。
+
+    当前状态: ✅ 已完成 (代码已应用)
+
+    关键文件:
+
+        src/views/treatments/index.vue: [重构] 实现了 PC 端折叠展开 (Expand) 与 移动端垂直堆叠 (Vertical Stack) 混合布局。
+
+2. 本次会话变动 (Changelog)
+
+    [重构] PC 端交互: 引入 el-table-column type="expand"，在展开行中以子列表形式展示每个病灶的独立图片组、备注及专属时长。
+
+    [重构] 移动端交互: 弃用单行卡片，改用“垂直堆叠流 (Focus Stream)”。新数据 (details) 渲染为多行列表 (左图右文)，旧数据 (target) 回退为单行兼容模式。
+
+    [UI] 视觉增强: 引入 EditPen, Picture 图标用于提示备注与空图片状态；新增 .lesion-gallery (网格布局) 与 .lesion-stack-item 样式。
+
+    [逻辑] 数据兼容: 完善了 v-if/else 逻辑，确保 row.details (新) 与 row.target (旧) 在同一列表中无缝共存。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 在移动端真机验证多病灶卡片在长列表下的滚动性能及点击穿透问题。
+
+    TODO: 验证 el-table 的展开状态在分页切换或搜索时的保持/重置行为。
+
+    RISK: 列表页图片加载量显著增加 (每个病灶多图)，需关注网络负载，必要时引入懒加载 (Lazy Load) 优化。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3, TypeScript, Element Plus (Icons: EditPen, Picture, etc.)
+
+    Data Model: Strapi v5 Component (lesion-record) nested in Treatment.
+
+    Config: 依赖 VITE_API_URL 环境变量处理图片路径。

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { Search, Refresh, Plus, Delete, Timer, Calendar } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Delete, Timer, Calendar, EditPen, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 // 组件引入
@@ -8,7 +8,7 @@ import TreatmentCreateDialog from '../../components/TreatmentCreateDialog.vue'
 
 // API 引入
 import { getTreatmentList, deleteTreatment } from '../../api/treatment'
-import type { Treatment, StrapiMedia, LesionDetail } from '../../api/types'
+import type { Treatment, StrapiMedia } from '../../api/types'
 
 // 常量引入
 import { TREATMENT_TARGET_MAP } from '../../constants/treatment';
@@ -154,14 +154,59 @@ onUnmounted(() => {
 
       <div v-loading="loading" class="data-wrapper">
         
-        <el-table v-if="!isMobile" :data="tableData" border style="margin-top: 20px">
+        <el-table v-if="!isMobile" :data="tableData" border style="margin-top: 20px" row-key="id">
+          
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-container">
+                <div v-if="row.details && row.details.length > 0" class="lesion-list">
+                  <div v-for="lesion in row.details" :key="lesion.id" class="lesion-item">
+                    <div class="lesion-gallery">
+                      <div v-if="lesion.photos && lesion.photos.length > 0" class="photo-grid">
+                        <el-image 
+                          v-for="photo in lesion.photos"
+                          :key="photo.id"
+                          class="lesion-img"
+                          :src="getThumbnailUrl(photo)"
+                          :preview-src-list="lesion.photos.map((p: StrapiMedia) => getThumbnailUrl(p).replace('thumbnail_', ''))"
+                          preview-teleported
+                          fit="cover"
+                        />
+                      </div>
+                      <div v-else class="no-photo-placeholder">
+                        <el-icon><Picture /></el-icon> 暂无影像
+                      </div>
+                    </div>
+                    
+                    <div class="lesion-meta">
+                      <div class="meta-header">
+                        <span class="part-badge">{{ TREATMENT_TARGET_MAP[lesion.part] || lesion.part }}</span>
+                        <el-tag v-if="lesion.duration" size="small" type="info" effect="plain" round>
+                          <el-icon><Timer /></el-icon> {{ lesion.duration }}h
+                        </el-tag>
+                      </div>
+                      <div v-if="lesion.notes" class="meta-notes">
+                        <el-icon><EditPen /></el-icon> {{ lesion.notes }}
+                      </div>
+                      <div v-else class="text-gray-300 text-xs mt-2">无备注</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else class="legacy-notice">
+                  此记录为旧版本格式，无详细病灶分项数据。
+                </div>
+              </div>
+            </template>
+          </el-table-column>
+
           <el-table-column prop="treatmentNo" label="编号" width="120">
             <template #default="{ row }">
               <el-tag>{{ row.treatmentNo }}</el-tag>
             </template>
           </el-table-column>
           
-          <el-table-column label="影像资料" width="120">
+          <el-table-column label="影像概览" width="120">
             <template #default="{ row }">
               <div v-if="getTreatmentImages(row).length > 0" style="display: flex; align-items: center;">
                 <el-image 
@@ -186,7 +231,7 @@ onUnmounted(() => {
             </template>
           </el-table-column>
 
-          <el-table-column label="部位">
+          <el-table-column label="涉及部位">
             <template #default="{ row }">
               <div v-if="row.details && row.details.length > 0" class="flex-tags">
                  <el-tag v-for="detail in row.details" :key="detail.id" size="small" type="success" style="margin-right: 4px;">
@@ -200,7 +245,7 @@ onUnmounted(() => {
             </template>
           </el-table-column>
 
-          <el-table-column label="时长" width="100" align="center">
+          <el-table-column label="总时长" width="100" align="center">
             <template #default="{ row }">
               <el-tag v-if="row.duration" type="info" effect="plain">
                 {{ row.duration }} 小时
@@ -224,54 +269,80 @@ onUnmounted(() => {
 
         <div v-else class="mobile-list">
           <div v-if="tableData.length === 0" class="empty-text">暂无数据</div>
+          
           <div v-for="item in tableData" :key="item.id" class="mobile-card">
             <div class="card-header">
               <span class="card-no">{{ item.treatmentNo }}</span>
-              <el-tag v-if="item.duration" size="small" type="info" effect="plain">
-                <el-icon><Timer /></el-icon> {{ item.duration }}h
-              </el-tag>
+              <div class="header-right">
+                <span class="patient-name" v-if="item.patient">{{ item.patient.Name }}</span>
+                <el-tag v-if="item.duration" size="small" type="info" effect="plain" style="margin-left: 8px;">
+                   {{ item.duration }}h
+                </el-tag>
+              </div>
             </div>
             
-            <div class="card-body">
-              <div class="img-wrapper">
-                 <el-image 
-                  v-if="getTreatmentImages(item).length > 0"
-                  class="mobile-thumb"
-                  :src="getThumbnailUrl(getTreatmentImages(item)[0])"
-                  :preview-src-list="getTreatmentImages(item).map(img => getThumbnailUrl(img).replace('thumbnail_', ''))"
-                  preview-teleported
-                  fit="cover"
-                >
-                  <template #error><div class="img-placeholder">无图</div></template>
-                </el-image>
-                <div v-else class="img-placeholder">无图</div>
-                
-                <div v-if="getTreatmentImages(item).length > 1" class="img-count">
-                  +{{ getTreatmentImages(item).length }}
-                </div>
-              </div>
+            <div class="card-body-wrapper">
+              
+              <template v-if="item.details && item.details.length > 0">
+                <div v-for="(lesion, idx) in item.details" :key="lesion.id" class="lesion-stack-item" :class="{'no-border': idx === item.details.length - 1}">
+                  <div class="stack-thumb-wrapper">
+                    <el-image 
+                      v-if="lesion.photos && lesion.photos.length > 0"
+                      class="stack-thumb"
+                      :src="getThumbnailUrl(lesion.photos[0])"
+                      :preview-src-list="lesion.photos.map(p => getThumbnailUrl(p).replace('thumbnail_', ''))"
+                      preview-teleported
+                      fit="cover"
+                    />
+                    <div v-else class="stack-placeholder">无图</div>
+                    <div v-if="lesion.photos && lesion.photos.length > 1" class="stack-count">
+                      +{{ lesion.photos.length }}
+                    </div>
+                  </div>
 
-              <div class="info-wrapper">
-                <div class="info-row">
-                  <span class="label">患者:</span>
-                  <span class="value link" v-if="item.patient">{{ item.patient.Name }}</span>
-                  <span class="value warning" v-else>未关联</span>
-                </div>
-                <div class="info-row">
-                  <span class="label">部位:</span>
-                  <div class="value">
-                    <template v-if="item.details && item.details.length > 0">
-                      <span v-for="(d, idx) in item.details" :key="idx">
-                        {{ TREATMENT_TARGET_MAP[d.part] || d.part }}
-                        <span v-if="idx < item.details.length - 1">, </span>
-                      </span>
-                    </template>
-                    <template v-else>
-                      {{ item.target ? (TREATMENT_TARGET_MAP[item.target] || item.target) : '-' }}
-                    </template>
+                  <div class="stack-info">
+                    <div class="stack-row-main">
+                      <span class="stack-part">{{ TREATMENT_TARGET_MAP[lesion.part] || lesion.part }}</span>
+                      <span v-if="lesion.duration" class="stack-duration">{{ lesion.duration }}h</span>
+                    </div>
+                    <div v-if="lesion.notes" class="stack-note">
+                      {{ lesion.notes }}
+                    </div>
                   </div>
                 </div>
-              </div>
+              </template>
+
+              <template v-else>
+                 <div class="card-body-legacy">
+                    <div class="img-wrapper">
+                       <el-image 
+                        v-if="getTreatmentImages(item).length > 0"
+                        class="mobile-thumb"
+                        :src="getThumbnailUrl(getTreatmentImages(item)[0])"
+                        :preview-src-list="getTreatmentImages(item).map(img => getThumbnailUrl(img).replace('thumbnail_', ''))"
+                        preview-teleported
+                        fit="cover"
+                      />
+                      <div v-else class="img-placeholder">无图</div>
+                      <div v-if="getTreatmentImages(item).length > 1" class="img-count">
+                        +{{ getTreatmentImages(item).length }}
+                      </div>
+                    </div>
+
+                    <div class="info-wrapper">
+                      <div class="info-row">
+                        <span class="label">部位:</span>
+                        <span class="value">
+                          {{ item.target ? (TREATMENT_TARGET_MAP[item.target] || item.target) : '-' }}
+                        </span>
+                      </div>
+                      <div class="info-row warning">
+                        (旧版数据)
+                      </div>
+                    </div>
+                 </div>
+              </template>
+
             </div>
 
             <div class="card-footer">
@@ -339,6 +410,191 @@ onUnmounted(() => {
   justify-content: space-between;
 }
 
+/* --- PC Expand Styles (方案 B) --- */
+.expand-container {
+  padding: 10px 20px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+.lesion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.lesion-item {
+  display: flex;
+  gap: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px dashed #e4e7ed;
+}
+.lesion-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* PC Gallery Grid */
+.lesion-gallery {
+  width: 200px; /* 固定宽度，左图右文 */
+  flex-shrink: 0;
+}
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.lesion-img {
+  width: 100%;
+  aspect-ratio: 1; /* 正方形 */
+  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+}
+.no-photo-placeholder {
+  width: 100%;
+  height: 60px;
+  background: #fff;
+  border: 1px dashed #c0c4cc;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 13px;
+  gap: 5px;
+}
+
+/* PC Meta Info */
+.lesion-meta {
+  flex: 1;
+}
+.meta-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.part-badge {
+  font-weight: bold;
+  font-size: 15px;
+  color: #303133;
+}
+.meta-notes {
+  font-size: 13px;
+  color: #606266;
+  background: #fff;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.4;
+}
+.legacy-notice {
+  text-align: center;
+  color: #909399;
+  font-style: italic;
+  padding: 10px;
+}
+
+/* --- Mobile Stack Styles (方案 C) --- */
+.card-body-wrapper {
+  margin-bottom: 12px;
+}
+
+/* New Data: Vertical Stack */
+.lesion-stack-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f2f6fc;
+}
+.lesion-stack-item.no-border {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.stack-thumb-wrapper {
+  position: relative;
+  width: 70px;
+  height: 70px;
+  flex-shrink: 0;
+}
+.stack-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+}
+.stack-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #f5f7fa;
+  color: #c0c4cc;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+.stack-count {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 4px 0 6px 0;
+}
+
+.stack-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 4px;
+}
+.stack-row-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.stack-part {
+  font-weight: 600;
+  font-size: 15px;
+  color: #303133;
+}
+.stack-duration {
+  font-size: 12px;
+  color: #909399;
+  background: #f4f4f5;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+.stack-note {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.4;
+  background: #fafafa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 2px;
+}
+
+/* Legacy Data: Horizontal */
+.card-body-legacy {
+  display: flex;
+  gap: 12px;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+}
+.patient-name {
+  font-size: 13px;
+  color: #409EFF;
+  font-weight: 500;
+}
+
 /* 移动端卡片列表 */
 .mobile-list {
   margin-top: 15px;
@@ -367,12 +623,6 @@ onUnmounted(() => {
   font-weight: bold;
   font-size: 16px;
   color: #303133;
-}
-
-.card-body {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
 }
 
 .img-wrapper {
