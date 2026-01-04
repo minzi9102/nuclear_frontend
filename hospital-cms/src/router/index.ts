@@ -50,7 +50,7 @@ const router = createRouter({
 })
 
 // 路由守卫：防止没登录的人乱跑
-router.beforeEach((to, _from, next) => {
+router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('jwt')
 
   // 逻辑：如果去的不是登录页，且没有 Token，则强制跳转到登录页

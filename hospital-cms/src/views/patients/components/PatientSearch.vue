@@ -4,7 +4,7 @@ import { Search, Plus, Filter, Refresh, Finished } from '@element-plus/icons-vue
 import { PAST_TREATMENT_OPTIONS } from '../../../constants/treatment'
 
 // Props: 接收父组件的响应式对象
-defineProps<{
+const props = defineProps<{
   keyword: string
   advancedForm: any
 }>()
