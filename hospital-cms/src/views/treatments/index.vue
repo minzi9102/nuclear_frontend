@@ -181,8 +181,16 @@ onUnmounted(() => {
                     <div class="lesion-meta">
                       <div class="meta-header">
                         <span class="part-badge">{{ TREATMENT_TARGET_MAP[lesion.part] || lesion.part }}</span>
-                        <el-tag v-if="lesion.duration" size="small" type="info" effect="plain" round>
-                          <el-icon><Timer /></el-icon> {{ lesion.duration }}h
+                        <el-tag 
+                          v-if="lesion.duration || row.duration" 
+                          size="small" 
+                          :type="lesion.duration ? 'warning' : 'info'" 
+                          :effect="lesion.duration ? 'light' : 'plain'"
+                          round
+                          class="duration-tag"
+                        >
+                          <el-icon><Timer /></el-icon> 
+                          {{ lesion.duration || row.duration }}h
                         </el-tag>
                       </div>
                       <div v-if="lesion.notes" class="meta-notes">
@@ -303,7 +311,13 @@ onUnmounted(() => {
                   <div class="stack-info">
                     <div class="stack-row-main">
                       <span class="stack-part">{{ TREATMENT_TARGET_MAP[lesion.part] || lesion.part }}</span>
-                      <span v-if="lesion.duration" class="stack-duration">{{ lesion.duration }}h</span>
+                      <span 
+                        v-if="lesion.duration || item.duration" 
+                        class="stack-duration"
+                        :class="{ 'is-special': lesion.duration }"
+                      >
+                        {{ lesion.duration || item.duration }}h
+                      </span>
                     </div>
                     <div v-if="lesion.notes" class="stack-note">
                       {{ lesion.notes }}
@@ -565,10 +579,13 @@ onUnmounted(() => {
 }
 .stack-duration {
   font-size: 12px;
+  padding: 2px 8px; /* 稍微加宽一点 */
+  border-radius: 10px;
+  
+  /* 默认样式 (灰色 - 对应继承总时长) */
   color: #909399;
   background: #f4f4f5;
-  padding: 2px 6px;
-  border-radius: 10px;
+  border: 1px solid transparent; /* 占位，防止切换时抖动 */
 }
 .stack-note {
   font-size: 13px;
@@ -579,7 +596,12 @@ onUnmounted(() => {
   border-radius: 4px;
   margin-top: 2px;
 }
-
+.stack-duration.is-special {
+  background-color: #fffbeb; /* 浅黄色背景 */
+  color: #b45309;            /* 深琥珀色文字 */
+  border: 1px solid #fcd34d; /* 增加边框增强辨识度 */
+  font-weight: 500;
+}
 /* Legacy Data: Horizontal */
 .card-body-legacy {
   display: flex;
@@ -721,5 +743,11 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+:deep(.el-tag--warning.el-tag--light) {
+  background-color: #fffbeb;
+  border-color: #fcd34d;
+  color: #b45309;
 }
 </style>

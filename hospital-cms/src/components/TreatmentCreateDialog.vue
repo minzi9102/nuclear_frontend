@@ -227,12 +227,12 @@ const handleSubmit = async () => {
             : '00000000'
 
           // 2.4 治疗日期
-          const today = dayjs().format('YYYYMMDD')
+          const today = dayjs().format('YYYYMMDDHHmm')
 
           // 组合基础部分 (注意：这里还没加部位)
           baseFilePrefix = `${today}_${namePinyin}_${gender}_${birthday}_seq${finalCount}`
         } else {
-          baseFilePrefix = `Unknown_${dayjs().format('YYYYMMDD')}_seq${finalCount}`
+          baseFilePrefix = `Unknown_${dayjs().format('YYYYMMDDHHmm')}_seq${finalCount}`
         }
 
         // ==========================================
@@ -411,6 +411,7 @@ defineExpose({ open })
                    :min="0.1" :step="0.5" 
                    style="width: 100%" 
                    controls-position="right"
+                   :disabled="formData.lesions.length === 1"
                  />
               </el-form-item>
             </el-col>

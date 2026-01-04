@@ -48,8 +48,12 @@
                   <span class="bullet-point"></span>
                   部位：{{ getTargetLabel(lesion.part) }}
                 </div>
-                <div v-if="lesion.duration" class="lesion-meta">
-                  {{ lesion.duration }}小时
+                <div v-if="lesion.duration != null || treatment.duration != null" 
+                class="lesion-meta"
+                :class="{ 'is-special': lesion.duration != null }"
+                >
+                  <el-icon class="lesion-meta-icon"><Timer /></el-icon>
+                  <span>{{ lesion.duration != null ? lesion.duration : treatment.duration }} 小时</span>
                 </div>
               </div>
 
@@ -214,11 +218,21 @@ const handleCollapseChange = async (val: any) => {
 }
 
 .lesion-meta {
+  display: flex;           /* 🟢 新增：使用 flex 布局 */
+  align-items: center;     /* 🟢 新增：垂直居中 */
+  gap: 4px;               /* 🟢 新增：图标和文字的间距 */
   font-size: 12px;
   color: #6b7280;
   background-color: #f3f4f6;
-  padding: 2px 6px;
+  padding: 2px 8px;       /* 微调左右内边距 */
   border-radius: 4px;
+  white-space: nowrap;     /* 防止文字换行 */
+}
+
+.lesion-meta-icon {
+  font-size: 13px;
+  position: relative;
+  top: -0.5px;            /* 微调图标位置，视觉上更平衡 */
 }
 
 .lesion-note { 
@@ -230,6 +244,18 @@ const handleCollapseChange = async (val: any) => {
   border-radius: 6px; 
   border: 1px solid #fcd34d; 
   line-height: 1.5;
+}
+
+/* 🟡 新增：特殊时长高亮样式 */
+.lesion-meta.is-special {
+  background-color: #fffbeb; /* 浅黄色背景 (与备注背景呼应) */
+  color: #b45309;            /* 深琥珀色文字 (比备注文字更深一点，增强可读性) */
+  font-weight: 500;          /* 稍微加粗，强调特殊性 */
+}
+
+/* 可选：如果你希望特殊时长的图标也变色，可以加上这个 */
+.lesion-meta.is-special .el-icon {
+  color: #d97706;
 }
 
 :deep(.el-collapse-item__header) { height: auto !important; min-height: 48px; padding: 4px 0 4px 10px !important; align-items: flex-start; border-bottom: 1px solid #f3f4f6; }

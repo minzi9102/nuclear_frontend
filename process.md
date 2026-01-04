@@ -1656,3 +1656,51 @@ Dev Context Snapshot [2026/01/04 12:50]
     Tech Stack: Vue 3 (Composition API), TypeScript, Strapi v5, pinyin-pro.
 
     Config: 依赖 VITE_API_URL；文件命名完全由前端 submitAll(specificSuffix) 控制。
+
+
+Dev Context Snapshot [2026/01/04 16:00]
+1. 核心任务与状态
+
+    当前目标: 优化治疗记录（Treatment）中多病灶（Lesions/Details）的时长管理与显示逻辑。
+
+    当前状态: 已完成优化
+
+    关键文件:
+
+        src/components/PatientDetailDialog/TreatmentList.vue: 病人详情页的时间轴显示逻辑。
+
+        src/components/TreatmentCreateDialog.vue: 新建治疗记录的表单逻辑。
+
+        src/views/treatments/index.vue: 治疗记录主列表（PC/Mobile）显示逻辑。
+
+2. 本次会话变动 (Changelog)
+
+    [UI/UX] 治疗时长显示策略 (Detail & List View):
+
+        逻辑变更：每个病灶独立显示时长。若 lesion.duration 存在，显示为黄色高亮（特殊时长）；若不存在，回退显示总时长 row.duration 并显示为灰色（继承时长）。
+
+        实现：修改了 TreatmentList.vue (Collapse Item) 和 index.vue (Table Expand & Mobile Card)。
+
+        样式：新增 .is-special CSS 类及 el-tag 的 type="warning" 状态。
+
+    [Logic] 新建表单约束 (TreatmentCreateDialog.vue):
+
+        约束：当病灶数量 === 1 时，禁用“特殊时长”输入框，强制使用基础时长。
+
+        联动：删除病灶导致数量降为 1 时，自动重置剩余病灶的 duration 为 undefined。
+
+    [Refactor] 文件命名规则:
+
+        变更：baseFilePrefix 生成规则由 YYYYMMDD 升级为 YYYYMMDD_HHmmss，增加文件名唯一性。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 验证 Strapi 后端 Model 设置，确保 details.duration 字段允许为空（Nullable），以支持前端的“继承”逻辑。
+
+    Note: 移动端适配使用了 CSS Stack 布局，需注意在超小屏幕（<320px）下时长标签是否会挤压部位名称。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3 (Composition API), TypeScript, Element Plus, Day.js, Strapi v5 (Backend).
+
+    Global Config: TREATMENT_TARGET_MAP 用于部位枚举映射。
