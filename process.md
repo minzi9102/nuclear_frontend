@@ -1621,3 +1621,38 @@ Dev Context Snapshot [2026/01/03 18:45]
     Data Model: Strapi v5 Component (lesion-record) nested in Treatment.
 
     Config: 依赖 VITE_API_URL 环境变量处理图片路径。
+
+Dev Context Snapshot [2026/01/04 12:50]
+1. 核心任务与状态
+
+    当前目标: 实现科研级图片自动命名策略优化，增加“治疗序号”标记 (_seqX) 以适配 NAS 归档。
+
+    当前状态: ✅ 已完成 (API 接入与前端逻辑修复完毕)。
+
+    关键文件:
+
+        src/api/treatment.ts: [新增] getLastSequenceNumber 接口。
+
+        src/components/TreatmentCreateDialog.vue: [修改] 接入序号预判逻辑，修正 handleSubmit 作用域报错。
+
+2. 本次会话变动 (Changelog)
+
+    [API] 新增 getLastSequenceNumber(patientId): 查询最新单条记录 (sort: sequence_number:desc) 用于前端预判。
+
+    [Logic] 序号优先级: formData.sequence_number (手动) > predictedNextSequence (API预判) > 1 (默认)。
+
+    [Naming] 文件名格式更新: ${Date}_${Pinyin}_${Gender}_${DOB}_seq${Count}_${Target}。
+
+    [Fix] 修复 ts-plugin(2304): 将 const finalCount 定义提升至 if (currentPatient) 块级作用域之外，解决 else 分支无法访问变量的问题。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 在真机/联调环境中验证上传文件的最终命名是否符合预期 (如 20260104_LiSi_Male_19900101_seq5_Face.jpg)。
+
+    RISK: 极低概率并发冲突（前端预判 vs 后端 Lifecycle 计算），但在单人操作场景下可忽略。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3 (Composition API), TypeScript, Strapi v5, pinyin-pro.
+
+    Config: 依赖 VITE_API_URL；文件命名完全由前端 submitAll(specificSuffix) 控制。

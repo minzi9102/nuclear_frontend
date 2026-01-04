@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, nextTick, computed } from 'vue'
+import { ref, reactive, nextTick, computed, watch } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import dayjs from 'dayjs' // 建议引入 dayjs 处理日期，或用原生 Date
 import { pinyin } from 'pinyin-pro'
@@ -9,7 +9,7 @@ import { User } from '@element-plus/icons-vue'
 import ImageUploader from '../components/ImageUploader/index.vue'
 
 // API 引入
-import { createTreatment } from '../api/treatment'
+import { createTreatment, getLastSequenceNumber } from '../api/treatment'
 import { getPatientList } from '../api/patient'
 import type { Patient } from '../api/types'
 
@@ -30,6 +30,7 @@ const formLoading = ref(false)
 const formRef = ref<FormInstance>()
 const uploaderRef = ref<InstanceType<typeof ImageUploader> | null>(null)
 const uploaderRefs = ref<Map<number, any>>(new Map())
+const predictedNextSequence = ref(1) // [新增] 预判的下一个序号，默认为 1
 
 // 选项数据
 const targetOptions = TARGET_OPTIONS
@@ -66,6 +67,29 @@ const rules = {
 }
 
 // --- 核心方法 ---
+
+// ------------------------------------------------------
+// [新增] 核心方法：获取并计算下一个序号
+// ------------------------------------------------------
+const fetchNextSequence = async (patientId: string) => {
+  if (!patientId) return
+  try {
+    const res: any = await getLastSequenceNumber(patientId)
+    const list = res.data?.data || []
+    
+    if (list.length > 0 && list[0].sequence_number) {
+      // 如果找到了历史记录，下一个就是 最大值 + 1
+      predictedNextSequence.value = list[0].sequence_number + 1
+    } else {
+      // 没找到记录，说明是第一次
+      predictedNextSequence.value = 1
+    }
+    console.log('🔮 预判下一次治疗序号为:', predictedNextSequence.value)
+  } catch (error) {
+    console.warn('获取历史序号失败，降级为默认值 1', error)
+    predictedNextSequence.value = 1
+  }
+}
 
 // 1. 动态 Ref 绑定器
 const setUploaderRef = (el: any, index: number) => {
@@ -104,18 +128,27 @@ const open = (patient?: Patient) => {
 
   patientOptions.value = []
   lockedPatientData.value = null // 重置
+  predictedNextSequence.value = 1 // 重置
   
   if (patient) {
     isPatientLocked.value = true
     formData.patient = patient.documentId
     formData.patientName = patient.Name
     lockedPatientData.value = patient // ✅ 存下完整对象，备用
+    fetchNextSequence(patient.documentId)
   } else {
     isPatientLocked.value = false
   }
 
   // 3. 显示弹窗
   visible.value = true
+
+  watch(() => formData.patient, (newVal) => {
+    // 只有在非锁定模式，且有值的时候查
+    if (!isPatientLocked.value && newVal) {
+      fetchNextSequence(newVal)
+    }
+  })
   
   // 4. 重置校验状态 (等 DOM 更新后)
   nextTick(() => {
@@ -171,10 +204,10 @@ const handleSubmit = async () => {
 
         // ==========================================
         // 2. 生成基础文件名前缀 (Base Prefix)
-        // 格式: 20251230_LiSi_Male_19900101
         // ==========================================
         let baseFilePrefix = ''
-        
+        //逻辑：优先用手动输入的序号 -> 其次用API查到的预判序号 -> 都没有就默认 1
+        const finalCount = formData.sequence_number || predictedNextSequence.value
         if (currentPatient) {
           // 2.1 姓名转拼音
           const nameStr = currentPatient.Name || 'Unknown'
@@ -195,11 +228,11 @@ const handleSubmit = async () => {
 
           // 2.4 治疗日期
           const today = dayjs().format('YYYYMMDD')
-          
+
           // 组合基础部分 (注意：这里还没加部位)
-          baseFilePrefix = `${today}_${namePinyin}_${gender}_${birthday}`
+          baseFilePrefix = `${today}_${namePinyin}_${gender}_${birthday}_seq${finalCount}`
         } else {
-          baseFilePrefix = `Unknown_${dayjs().format('YYYYMMDD')}`
+          baseFilePrefix = `Unknown_${dayjs().format('YYYYMMDD')}_seq${finalCount}`
         }
 
         // ==========================================

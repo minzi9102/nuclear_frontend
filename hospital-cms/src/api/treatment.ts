@@ -2,6 +2,21 @@ import request from '../utils/request'
 import type { ApiResponse, Treatment, TreatmentQueryParams } from './types'
 import qs from 'qs'
 
+/**
+ * 获取患者最新的治疗序号
+ * @param patientId 患者的 DocumentId
+ */
+export const getLastSequenceNumber = (patientId: string) => {
+  return request.get('/treatments', {
+    params: {
+      'filters[patient][documentId][$eq]': patientId,
+      'sort': 'sequence_number:desc', // 倒序，取最大的
+      'pagination[limit]': 1,         // 只要一条
+      'fields[0]': 'sequence_number'  // 只取序号字段，极简
+    }
+  })
+}
+
 // 获取治疗记录列表
 export const getTreatmentList = (params: TreatmentQueryParams) => {
   // 构建深度查询对象

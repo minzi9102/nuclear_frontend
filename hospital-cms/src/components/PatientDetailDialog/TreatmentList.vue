@@ -49,7 +49,7 @@
                   部位：{{ getTargetLabel(lesion.part) }}
                 </div>
                 <div v-if="lesion.duration" class="lesion-meta">
-                  +{{ lesion.duration }}小时
+                  {{ lesion.duration }}小时
                 </div>
               </div>
 
