@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { createPatient, updatePatient } from '../../../api/patient'
 import { PAST_TREATMENT_OPTIONS, type PastTreatment } from '../../../constants/treatment'
 import type { Patient } from '../../../api/types'
+import { Calendar } from '@element-plus/icons-vue'
 
 const emit = defineEmits(['success'])
 
@@ -11,6 +12,11 @@ const visible = ref(false)
 const title = ref('新建患者')
 const loading = ref(false)
 const formRef = ref<FormInstance>()
+
+const isMobile = ref(false)
+const checkMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+}
 
 const formData = reactive({
   documentId: undefined as string | undefined,
@@ -24,7 +30,14 @@ const rules = {
   Name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   Birthday: [{ required: true, message: '请选择出生日期', trigger: 'change' }]
 }
+onMounted(() => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+})
 
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
+})
 // 供父组件调用
 const open = (row?: Patient) => {
   visible.value = true
@@ -91,7 +104,35 @@ defineExpose({ open })
                 <el-radio-button label="female" class="w-1/2">女</el-radio-button>
             </el-radio-group>
         </el-form-item>
-        <el-form-item label="出生日期" prop="Birthday"><el-date-picker v-model="formData.Birthday" type="date" style="width: 100%" size="large" value-format="YYYY-MM-DD" /></el-form-item>
+        <el-form-item label="出生日期" prop="Birthday">
+          <div v-if="isMobile" class="el-input el-input--large el-input--prefix" style="width: 100%;">
+              <div class="el-input__wrapper" style="box-shadow: 0 0 0 1px #dcdfe6 inset; padding: 1px 11px;">
+                  <span class="el-input__prefix">
+                      <span class="el-input__prefix-inner">
+                          <el-icon class="el-input__icon"><Calendar /></el-icon>
+                      </span>
+                  </span>
+                  <input 
+                      type="date" 
+                      v-model="formData.Birthday"
+                      class="el-input__inner"
+                      style="height: 38px; line-height: 38px; -webkit-appearance: none; background: transparent; border: none; width: 100%; color: #606266; font-family: inherit;"
+                      placeholder="请选择日期"
+                  />
+              </div>
+          </div>
+
+          <el-date-picker 
+              v-else
+              v-model="formData.Birthday" 
+              type="date" 
+              style="width: 100%" 
+              size="large" 
+              value-format="YYYY-MM-DD"
+              :editable="false"
+              placeholder="请选择日期"
+          />
+        </el-form-item>
         <el-form-item label="有无接受过其他治疗">
             <el-checkbox-group v-model="formData.past_treatments" class="flex flex-wrap">
                 <el-checkbox v-for="opt in PAST_TREATMENT_OPTIONS" :key="opt.value" :label="opt.value" border class="mb-2 mr-2 ml-0">{{ opt.label }}</el-checkbox>
