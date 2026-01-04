@@ -1800,3 +1800,52 @@ Dev Context Snapshot [2026/01/04 21:36]
     Data Model: Treatment -> details (Component, Repeatable) -> photos (Media).
 
     Config: 依赖 VITE_API_URL 处理图片路径拼接。
+
+Dev Context Snapshot [2026/01/04 22:30]
+1. 核心任务与状态
+
+    当前目标: 优化 TreatmentCreateDialog 组件中多病灶模式下的“治疗时长”交互逻辑与状态清洗。
+
+    当前状态: ✅ 已完成 (逻辑已修复，TS 类型已修正)。
+
+    关键文件:
+
+        src/components/TreatmentCreateDialog.vue: [重构删除逻辑、拆分 v-model、显式类型注解]
+
+2. 本次会话变动 (Changelog)
+
+    [修复] 状态清洗 (State Sanitation):
+
+        修改 removeLesion 函数：当 lesions.length === 1 时，强制重置 lesions[0].duration = undefined，防止“特殊时长”在退回单病灶模式后残留。
+
+        解决 ts-plugin(2532) 报错：增加 const survivor = ...; if (survivor) 防御性判断。
+
+    [重构] 交互逻辑 (Inheritance UI):
+
+        拆分 v-model 为 :model-value 和 @update:model-value。
+
+        实现逻辑：未修改时显示 formData.base_duration (继承)，修改后写入 item.duration (覆盖)。
+
+    [UI] 显隐控制:
+
+        移除 v-if="length > 1"，改为 :disabled="length === 1"。实现单病灶时显示输入框但禁止修改（展示基础时长）。
+
+    [修复] TS 类型:
+
+        解决 Template 中 @update:model-value 参数的 ts-plugin(7006) (Implicit any) 报错，显式标注 (val: number | undefined)。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 验证 CSS 类 .is-inherited 是否正确生效（使继承值的文字颜色变淡）。
+
+    RISK: 需再次确认 Strapi 后端 Model (treatment.details component) 的 duration 字段已设置为 Nullable (允许为空)，否则 undefined 提交时可能被转为 0 或报错。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3 (Composition API), TypeScript (Strict Mode), Element Plus (el-input-number).
+
+    Data Context:
+
+        formData.lesions: Array<{ duration?: number, ... }>
+
+        formData.base_duration: number (Global fallback)

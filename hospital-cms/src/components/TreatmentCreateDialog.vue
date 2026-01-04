@@ -104,7 +104,15 @@ const addLesion = () => {
 }
 
 const removeLesion = (index: number) => {
-  formData.lesions.splice(index, 1)
+  formData.lesions.splice(index, 1);
+
+  if (formData.lesions.length === 1) {
+    const remainingLesion = formData.lesions[0];
+    // 只有当 remainingLesion 真的存在时才操作
+    if (remainingLesion) {
+      remainingLesion.duration = undefined;
+    }
+  }
 }
 
 /**
@@ -407,14 +415,16 @@ defineExpose({ open })
             </el-col>
             <el-col :xs="24" :sm="12">
               <el-form-item label="特殊时长" :prop="`lesions.${index}.duration`">
-                 <el-input-number 
-                   v-model="lesion.duration" 
-                   :placeholder="`同上 (${formData.base_duration})`"
-                   :min="0.1" :step="0.5" 
-                   style="width: 100%" 
-                   controls-position="right"
-                   :disabled="formData.lesions.length === 1"
-                 />
+                <el-input-number
+                  class="duration-input"
+                  :disabled="formData.lesions.length === 1"
+                  :model-value="lesion.duration ?? formData.base_duration"
+                  @update:model-value="(val: number | undefined) => lesion.duration = val"
+                  :step="1"
+                  :min="1"
+                  controls-position="right"                
+                  :class="{ 'is-inherited': lesion.duration === undefined }"
+                />
               </el-form-item>
             </el-col>
           </el-row>
@@ -504,5 +514,15 @@ defineExpose({ open })
   width: 100%;       
   left: 0;           
   z-index: -1;       
+}
+
+/* 当处于继承状态时，文字颜色变淡，提示用户这是默认值 */
+.duration-input.is-inherited :deep(.el-input__inner) {
+  color: #9ca3af; /* text-gray-400 */
+}
+
+/* 一旦修改（变为特殊时长），ElInputNumber 默认黑色，或者你可以加粗 */
+.duration-input :deep(.el-input__inner) {
+  font-weight: 500;
 }
 </style>
