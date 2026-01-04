@@ -13,11 +13,22 @@
         <template #title>
           <div class="collapse-header-wrapper">
             <div class="header-primary">
-              <span class="treatment-no">{{ treatment.treatmentNo }}</span>
-              
-              <el-tag size="default" effect="plain" class="target-tag">
-                {{ getSummaryTitle(treatment) }}
-              </el-tag>
+              <div class="title-left-group">
+                <span class="treatment-no">{{ treatment.treatmentNo }}</span>
+                <el-tag size="default" effect="plain" class="target-tag">
+                  {{ getSummaryTitle(treatment) }}
+                </el-tag>
+              </div>
+
+              <el-button 
+                type="primary" 
+                link 
+                :icon="Edit" 
+                class="edit-btn"
+                @click.stop="$emit('edit', treatment)"
+              >
+                编辑
+              </el-button>
             </div>
             
             <div class="header-secondary">
@@ -80,11 +91,13 @@
 
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
-import { Timer } from '@element-plus/icons-vue'
+import { Timer,Edit } from '@element-plus/icons-vue'
 import { TREATMENT_TARGET_MAP } from '../../constants/treatment'
 import TreatmentImages from './TreatmentImages.vue'
 import type { Treatment } from '../../api/types'
 
+// 🟢 定义 Emits
+const emit = defineEmits(['edit'])
 
 const props = defineProps<{
   treatments: Treatment[]
@@ -166,7 +179,25 @@ const handleCollapseChange = async (val: any) => {
 .custom-collapse { border: none; }
 .custom-collapse-item { margin-bottom: 5px; border: 1px solid rgba(0,0,0,0.04); border-radius: 10px; background-color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden; transition: all 0.2s; }
 .collapse-header-wrapper { display: flex; flex-direction: column; justify-content: center; padding: 8px 0; width: 100%; line-height: 1.4; }
-.header-primary { display: flex; align-items: center; margin-bottom: 6px; }
+.header-primary { 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; /* 关键：让左侧信息和右侧按钮分开 */
+  margin-bottom: 6px; 
+  padding-right: 12px; /* 给右侧箭头留一点距离，防止误触 */
+}
+/* 🟢 新增：左侧标题组 */
+.title-left-group {
+  display: flex;
+  align-items: center;
+}
+
+/* 🟢 新增：编辑按钮样式 */
+.edit-btn {
+  padding: 0 8px; 
+  font-size: 13px;
+  height: 24px;
+}
 .treatment-no { font-size: 17px; font-weight: 700; color: #111827; margin-right: 10px; }
 .target-tag { border: none; background-color: #eff6ff; color: #2563eb; font-weight: 500; }
 .header-secondary { display: flex; align-items: center; font-size: 13px; color: #9ca3af; }

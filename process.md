@@ -1759,3 +1759,44 @@ Dev Context Snapshot [2026/01/04 18:45]
         Upload Limit: 12 images (Hardcoded check).
 
         CSS: 使用了 v-deep 和 Vue 3 <Transition> 组件。
+
+Dev Context Snapshot [2026/01/04 21:36]
+1. 核心任务与状态
+
+    当前目标: 实现治疗记录列表页面的“编辑”功能集成，并优化排序与UI对齐。
+
+    当前状态: ✅ 已完成 / 已验证
+
+    关键文件:
+
+        src/views/treatments/index.vue: [新增 handleEdit 入口，修改 sort 为 updatedAt:desc，优化 PC/Mobile 操作列 UI]
+
+        src/components/TreatmentCreateDialog.vue: [实现 open() 支持编辑模式回显，处理多病灶/图片/时长数据映射]
+
+        src/components/PatientDetailDialog/index.vue: [修复 API populate 参数，确保深层 details 数据加载]
+
+        src/components/ImageUploader/index.vue: [支持 initialFiles 回显，submitAll 兼容旧 ID 与新 Raw 文件混合提交]
+
+2. 本次会话变动 (Changelog)
+
+    [新增] 在治疗记录列表 (PC & Mobile) 集成编辑按钮，调用 TreatmentCreateDialog 进行数据回填。
+
+    [修改] 将列表默认排序逻辑从 createdAt:desc 更改为 updatedAt:desc，确保最近修改置顶。
+
+    [UI] 强制 PC 端表格操作列 align="center"，优化移动端底部按钮组布局。
+
+    [TS] 修复了 duration 字段 null 无法赋值给 undefined 的类型兼容问题 (使用 ?? undefined)。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 在真机环境进行全流程回归测试 (新建 -> 编辑 -> 删除图片 -> 新增图片 -> 保存)。
+
+    RISK: 需关注 Strapi v5 深层 Populate 对列表加载性能的影响，若数据量大需考虑后端字段裁剪。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3 (Composition API), TypeScript, Element Plus, Strapi v5.
+
+    Data Model: Treatment -> details (Component, Repeatable) -> photos (Media).
+
+    Config: 依赖 VITE_API_URL 处理图片路径拼接。

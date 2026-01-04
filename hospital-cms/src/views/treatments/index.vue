@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { Search, Refresh, Plus, Delete, Timer, Calendar, EditPen, Picture } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Delete, Timer, Calendar, EditPen, Picture, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 // 组件引入
@@ -79,7 +79,7 @@ const fetchData = async () => {
           populate: 'photos'
         }
       },
-      sort: 'createdAt:desc',
+      sort: 'updatedAt:desc',
     }
     if (queryParams.treatmentNo) {
       apiParams['filters[treatmentNo][$contains]'] = queryParams.treatmentNo
@@ -101,8 +101,17 @@ const fetchData = async () => {
 const handleCreate = () => {
   treatmentCreateRef.value?.open()
 }
+// 🟢 3. 新增：处理编辑
+const handleEdit = (row: Treatment) => {
+  if (row.patient) {
+    // 传入 patient 对象和当前 treatment 对象，触发编辑回显
+    treatmentCreateRef.value?.open(row.patient, row)
+  } else {
+    ElMessage.warning('该记录未关联有效患者，无法编辑')
+  }
+}
 
-// 3. 删除
+// 4. 删除
 const handleDelete = (row: Treatment) => {
   ElMessageBox.confirm('确定删除吗?', '警告', { type: 'warning' })
     .then(async () => {
@@ -268,8 +277,9 @@ onUnmounted(() => {
             </template>
           </el-table-column>
 
-          <el-table-column label="操作" fixed="right" width="100">
+          <el-table-column label="操作" fixed="right" width="100" align="center">
             <template #default="{ row }">
+              <el-button link type="primary" :icon="EditPen" @click="handleEdit(row)">编辑</el-button>
               <el-button link type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
             </template>
           </el-table-column>
@@ -364,9 +374,14 @@ onUnmounted(() => {
                 <el-icon><Calendar /></el-icon>
                 {{ new Date(item.createdAt).toLocaleDateString() }}
               </div>
-              <el-button type="danger" link size="small" :icon="Delete" @click="handleDelete(item)">
-                删除
-              </el-button>
+              <div class="footer-actions">
+                <el-button type="primary" link size="small" :icon="EditPen" @click="handleEdit(item)">
+                  编辑
+                </el-button>
+                <el-button type="danger" link size="small" :icon="Delete" @click="handleDelete(item)">
+                  删除
+                </el-button>
+              </div>
             </div>
           </div>
         </div>
@@ -474,6 +489,11 @@ onUnmounted(() => {
   color: #909399;
   font-size: 13px;
   gap: 5px;
+}
+/* 🟢 新增：按钮组右对齐容器 */
+.footer-actions {
+  display: flex;
+  gap: 8px; /* 按钮间距 */
 }
 
 /* PC Meta Info */

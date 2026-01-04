@@ -43,10 +43,11 @@
         :treatment-count="patientData.treatments?.length || 0" 
       />
 
-      <TreatmentList :treatments="patientData.treatments || []" />
+      <TreatmentList :treatments="patientData.treatments || []" 
+      @edit="handleEditTreatment"/>
     </div>
 
-    <TreatmentCreateDialog ref="treatmentCreateRef" @success="onTreatmentCreated" />
+    <TreatmentCreateDialog ref="treatmentCreateRef" @success="onTreatmentSaved" />
   </el-dialog>
 </template>
 
@@ -55,7 +56,7 @@ import { ref } from 'vue'
 import { Loading, Close, Plus } from '@element-plus/icons-vue'
 import { getPatientList } from '../../api/patient' // 注意路径变化
 import { ElMessage } from 'element-plus'
-
+import type { Treatment } from '../../api/types' // 🟢 引入类型
 // 引入子组件
 import PatientInfo from './PatientInfo.vue'
 import TreatmentList from './TreatmentList.vue'
@@ -75,7 +76,16 @@ const openCreateDialog = () => {
   }
 }
 
-const onTreatmentCreated = () => { 
+// 🟢 新增：处理编辑点击
+const handleEditTreatment = (treatment: Treatment) => {
+  if (patientData.value) {
+    // 调用弹窗的 open 方法，传入当前病人和要编辑的治疗记录
+    treatmentCreateRef.value.open(patientData.value, treatment)
+  }
+}
+
+// 保存成功回调 (新建和编辑都走这里)
+const onTreatmentSaved = () => { 
   if (currentDocumentId.value) open(currentDocumentId.value) 
 }
 

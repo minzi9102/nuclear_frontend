@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { Plus, RefreshRight, Delete, Camera } from '@element-plus/icons-vue'
 import { ElMessage, type UploadInstance, type UploadFile, type UploadFiles } from 'element-plus'
 import Compressor from 'compressorjs'
@@ -8,10 +8,17 @@ import { uploadFile } from '../../api/upload'
 // --- 类型定义 ---
 interface LocalFile {
   uid: number
-  raw: File      
-  url: string    
+  id?: number      // 🟢 新增：如果有 id，说明是后端已存在的图片
+  raw?: File       // 🟢 修改：如果是回显图片，没有 raw
+  url: string      
   name: string
 }
+
+// 🟢 新增：接收初始图片 (用于编辑回显)
+const props = defineProps<{
+  limit?: number // 单次限制
+  initialFiles?: { id: number; url: string; name?: string }[] 
+}>()
 
 // --- 状态管理 ---
 const localFileList = ref<LocalFile[]>([])
@@ -21,7 +28,6 @@ const currentIndex = ref(0)
 const isProcessing = ref(false)
 const processingMessage = ref('')
 const pendingQueue = ref<File[]>([])
-// 🟢 新增：防抖计时器
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 // Upload 组件引用
@@ -32,7 +38,24 @@ const currentFile = computed(() => {
   return localFileList.value[currentIndex.value]
 })
 
-// --- 工具函数 ---
+// 🟢 监听初始数据变化 (回显逻辑)
+watch(() => props.initialFiles, (newVal) => {
+  if (newVal && newVal.length > 0) {
+    // 将后端数据转换为组件内部格式
+    localFileList.value = newVal.map(img => ({
+      uid: Date.now() + Math.random(),
+      id: img.id, // 记下 ID，提交时不用重传
+      url: img.url,
+      name: img.name || 'image.jpg'
+    }))
+    // 如果有图，默认选中第一张
+    if (localFileList.value.length > 0) currentIndex.value = 0
+  } else {
+    localFileList.value = []
+  }
+}, { immediate: true })
+
+// --- 工具函数 (保持不变) ---
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 const processRotation = (img: HTMLImageElement, angle: number, fileName: string): Promise<File> => {
@@ -84,7 +107,6 @@ const triggerUpload = () => {
 }
 
 const processQueue = async () => {
-  // 如果队列空了，停止
   if (pendingQueue.value.length === 0) {
     isProcessing.value = false
     return
@@ -93,8 +115,6 @@ const processQueue = async () => {
   isProcessing.value = true
   
   while (pendingQueue.value.length > 0) {
-    // 🟢 修复1：在取数据前，先更新一次文案，确保数字准确
-    // 此时队列已经通过防抖填满了
     const remainingCount = pendingQueue.value.length
     processingMessage.value = `正在处理图片... (剩余 ${remainingCount} 张)`
 
@@ -109,6 +129,7 @@ const processQueue = async () => {
       
       localFileList.value.push({
         uid: Date.now() + Math.random(),
+        // 新图片没有 ID
         raw: bakedFile,
         url: URL.createObjectURL(bakedFile),
         name: rawFile.name
@@ -130,25 +151,29 @@ const handleFileChange = (uploadFile: UploadFile, uploadFiles: UploadFiles) => {
   const rawFile = uploadFile.raw
   if (!rawFile) return
 
+  // 这里的逻辑只处理“新选择”的文件
+  // 清理 Element Plus 的默认列表，因为我们自己管理 localFileList
   const idx = uploadFiles.indexOf(uploadFile)
   if (idx !== -1) uploadFiles.splice(idx, 1)
 
-  const currentCount = localFileList.value.length
-  const pendingCount = pendingQueue.value.length
-  if (currentCount + pendingCount >= 12) {
-    ElMessage.warning('为了保证系统流畅，一次最多只能上传 12 张图片。')
-    return
-  }
-
-  // 入队
+  // 🟢 核心修改：移除总数限制，改为限制“单次批量操作”
+  // 如果用户一次性框选了超过 9 张，我们只取前 9 张，或者提示
+  // 但由于 Element Plus 的机制，我们这里更适合做队列检查
+  
+  // 策略：允许无限添加，但单次处理队列如果堆积太多可以提示
+  // 这里我们仅做简单的队列添加，不再拦截 total > 12
+  
+  // 🟢 限制单次上传意图：如果用户一次选了太多，可以在这里做截断
+  // 但为了体验，我们暂不设硬上限，只让队列慢慢跑
   pendingQueue.value.push(rawFile)
 
-  // 🟢 修复1：防抖启动
-  // 如果当前没在处理，不要立刻启动，而是等 100ms 看看还有没有新图片进来
   if (!isProcessing.value) {
     if (debounceTimer) clearTimeout(debounceTimer)
-    
     debounceTimer = setTimeout(() => {
+      // 🟢 在开始处理前检查队列长度，给个提示
+      if (pendingQueue.value.length > 9) {
+        ElMessage.warning(`您一次性选择了 ${pendingQueue.value.length} 张图片，系统将分批处理，请耐心等待。`)
+      }
       processQueue()
     }, 100)
   }
@@ -158,19 +183,37 @@ const rotateCurrent = async () => {
   const item = currentFile.value
   if (!item || isProcessing.value) return
 
+  // 🟢 特殊处理：如果是回显的旧图 (has ID)，旋转后必须视为新图 (清除 ID)
+  // 因为旋转改变了像素，必须重新上传
+  
   isProcessing.value = true
   processingMessage.value = '正在旋转图片...'
   await sleep(20)
 
   const oldUrl = item.url
   try {
-    const img = await fileToImage(item.raw)
+    // 兼容：如果是旧图，raw 可能为空，需要从 url 转回 File (fetch -> blob)
+    let fileToRotate = item.raw
+    if (!fileToRotate) {
+        const response = await fetch(oldUrl);
+        const blob = await response.blob();
+        fileToRotate = new File([blob], item.name, { type: blob.type });
+    }
+
+    const img = await fileToImage(fileToRotate)
     const rotatedFile = await processRotation(img, 90, item.name)
+    
     item.raw = rotatedFile
     item.url = URL.createObjectURL(rotatedFile)
-    URL.revokeObjectURL(oldUrl)
+    item.id = undefined // 🟢 关键：旋转后变成新图，移除旧 ID，触发重新上传
+    
+    // 只有本地生成的 URL 才需要 revoke，远端 URL 不需要
+    if (oldUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(oldUrl)
+    }
     URL.revokeObjectURL(img.src) 
   } catch (e) {
+    console.error(e)
     ElMessage.error('旋转失败')
   } finally {
     isProcessing.value = false
@@ -181,7 +224,11 @@ const removeCurrent = () => {
   if (isProcessing.value) return 
   const item = currentFile.value
   if (!item) return
-  URL.revokeObjectURL(item.url)
+  
+  if (item.url.startsWith('blob:')) {
+    URL.revokeObjectURL(item.url)
+  }
+  
   localFileList.value.splice(currentIndex.value, 1)
   
   if (localFileList.value.length === 0) {
@@ -196,6 +243,7 @@ const selectImage = (index: number) => {
   currentIndex.value = index
 }
 
+// 🟢 核心修改：提交逻辑支持混合 ID
 const submitAll = async (namingPrefix?: string): Promise<number[]> => {
   if (localFileList.value.length === 0) return []
   if (isProcessing.value) {
@@ -207,15 +255,27 @@ const submitAll = async (namingPrefix?: string): Promise<number[]> => {
   processingMessage.value = '正在上传数据...'
 
   try {
+    // 并行处理：旧图直接返回 ID，新图上传后返回 ID
     const uploadPromises = localFileList.value.map(async (item, index) => {
-      let customName = undefined;
-      if (namingPrefix) {
-        const seq = (index + 1).toString().padStart(2, '0');
-        customName = `${namingPrefix}_${seq}.jpg`;
+      // A. 如果是旧图，且没有被修改（有 ID），直接复用
+      if (item.id) {
+        return item.id
       }
-      const res = await uploadFile(item.raw, customName)
-      return res.id
+
+      // B. 如果是新图 (无 ID，有 raw)，执行上传
+      if (item.raw) {
+        let customName = undefined;
+        if (namingPrefix) {
+            const seq = (index + 1).toString().padStart(2, '0');
+            customName = `${namingPrefix}_${seq}.jpg`;
+        }
+        const res = await uploadFile(item.raw, customName)
+        return res.id
+      }
+
+      throw new Error('Invalid file state')
     })
+
     const results = await Promise.all(uploadPromises)
     return results
   } catch (error) {
@@ -231,7 +291,9 @@ defineExpose({
 })
 
 onBeforeUnmount(() => {
-  localFileList.value.forEach(item => URL.revokeObjectURL(item.url))
+  localFileList.value.forEach(item => {
+    if (item.url.startsWith('blob:')) URL.revokeObjectURL(item.url)
+  })
 })
 </script>
 
@@ -242,7 +304,6 @@ onBeforeUnmount(() => {
     :element-loading-text="processingMessage"
     element-loading-background="rgba(255, 255, 255, 0.8)"
   >
-    
     <div v-if="currentFile" class="main-preview-area">
       <div class="image-stage">
         <img :src="currentFile.url" alt="preview" />
@@ -269,8 +330,7 @@ onBeforeUnmount(() => {
       <div class="info-group">
         <p class="title">拍摄 / 选择照片</p>
         <p class="subtitle">
-          为了保证系统流畅，单次请勿超过 
-          <span class="highlight">12</span> 张
+          单次建议不超过 <span class="highlight">9</span> 张，可分批添加
         </p>
       </div>
     </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, nextTick, computed, watch } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
-import dayjs from 'dayjs' // 建议引入 dayjs 处理日期，或用原生 Date
+import dayjs from 'dayjs'
 import { pinyin } from 'pinyin-pro'
 import { User } from '@element-plus/icons-vue'
 
@@ -9,19 +9,20 @@ import { User } from '@element-plus/icons-vue'
 import ImageUploader from '../components/ImageUploader/index.vue'
 
 // API 引入
-import { createTreatment, getLastSequenceNumber } from '../api/treatment'
+import { createTreatment, updateTreatment, getLastSequenceNumber } from '../api/treatment'
 import { getPatientList } from '../api/patient'
-import type { Patient } from '../api/types'
+import type { Patient, Treatment } from '../api/types'
 
 // 常量引入
 import { TARGET_OPTIONS } from '../constants/treatment'
 
-// 定义 Props (可选，用于从父组件直接传参)
+// --- 环境变量 ---
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:1337'
+
 const props = defineProps<{
   defaultPatient?: { documentId: string; Name: string }
 }>()
 
-// 定义 Emits
 const emit = defineEmits(['success'])
 
 // --- 状态定义 ---
@@ -30,42 +31,45 @@ const formLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const uploaderRefs = ref<Map<number, any>>(new Map())
-const predictedNextSequence = ref(1) // [新增] 预判的下一个序号，默认为 1
+const predictedNextSequence = ref(1)
 
 // 选项数据
 const targetOptions = TARGET_OPTIONS
 const patientLoading = ref(false)
 const patientOptions = ref<Patient[]>([])
 
-// 锁定状态：如果从病人详情页打开，则锁定病人选择
+// 锁定状态
 const isPatientLocked = ref(false)
-
-// 临时存储传入的完整患者对象
 const lockedPatientData = ref<Patient | null>(null)
 
-// --- 响应式布局逻辑 ---
-// 如果没有 @vueuse/core，我们可以简单地用 computed 判断 width
+// 🟢 新增：编辑模式状态
+const isEditMode = ref(false)
+const editingId = ref<string>('')
+
 const width = ref(window.innerWidth)
 const isMobile = computed(() => width.value < 768)
 
 // 表单模型
+// 🟢 修改：lesions 增加 initialPhotos 字段 (仅用于前端传递数据给 Uploader)
 const formData = reactive({
   patient: '' as string,
   patientName: '' as string,
   sequence_number: undefined as number | undefined,
-  base_duration: 48, // ✅ 基准时长
+  base_duration: 48,
   
-  // ✅ 动态数组
   lesions: [
-    { key: Date.now(), part: '', notes: '', duration: undefined as number | undefined }
+    { 
+      key: Date.now(), 
+      part: '', 
+      notes: '', 
+      duration: undefined as number | undefined,
+      initialPhotos: [] as any[] // 🟢 增加此字段用于回显
+    }
   ]
 })
 
 // --- 核心方法 ---
 
-// ------------------------------------------------------
-// [新增] 核心方法：获取并计算下一个序号
-// ------------------------------------------------------
 const fetchNextSequence = async (patientId: string) => {
   if (!patientId) return
   try {
@@ -73,85 +77,122 @@ const fetchNextSequence = async (patientId: string) => {
     const list = res.data?.data || []
     
     if (list.length > 0 && list[0].sequence_number) {
-      // 如果找到了历史记录，下一个就是 最大值 + 1
       predictedNextSequence.value = list[0].sequence_number + 1
     } else {
-      // 没找到记录，说明是第一次
       predictedNextSequence.value = 1
     }
-    console.log('🔮 预判下一次治疗序号为:', predictedNextSequence.value)
   } catch (error) {
     console.warn('获取历史序号失败，降级为默认值 1', error)
     predictedNextSequence.value = 1
   }
 }
 
-// 1. 动态 Ref 绑定器
 const setUploaderRef = (el: any, index: number) => {
   if (el) {
     uploaderRefs.value.set(index, el)
   }
 }
 
-// 2. 增删病灶
 const addLesion = () => {
   formData.lesions.unshift({
-    key: Date.now(), // 用时间戳做唯一 key，防止渲染错乱
+    key: Date.now(),
     part: '', 
     notes: '',
-    duration: undefined 
+    duration: undefined,
+    initialPhotos: [] 
   })
 }
 
 const removeLesion = (index: number) => {
   formData.lesions.splice(index, 1)
-  // 注意：Map 中的 Ref 不需要手动清理，Vue 更新 DOM 时会自动处理
 }
 
 /**
- * 打开弹窗的方法（供父组件调用）
- * @param patient 传入完整的患者对象 (包含 Name, Gender, Birthday)
+ * 🟢 修改：打开弹窗的方法 (支持编辑)
+ * @param patient 患者对象
+ * @param treatmentToEdit (可选) 需要编辑的治疗记录对象
  */
-const open = (patient?: Patient) => {
-  // 1. 重置表单
+const open = (patient?: Patient, treatmentToEdit?: Treatment) => {
+  // 1. 重置表单基础状态
   formData.patient = ''
   formData.patientName = '' 
   formData.sequence_number = undefined
   formData.base_duration = 48
-  formData.lesions = [{ key: Date.now(), part: '', notes: '', duration: undefined }] // 恢复默认一行
-  uploaderRefs.value.clear() // 清空引用
+  formData.lesions = [] // 先清空，后面根据情况填充
+  uploaderRefs.value.clear()
 
   patientOptions.value = []
-  lockedPatientData.value = null // 重置
-  predictedNextSequence.value = 1 // 重置
+  lockedPatientData.value = null
+  predictedNextSequence.value = 1
   
+  isEditMode.value = false
+  editingId.value = ''
+
+  // 2. 处理患者信息 (Locked or Not)
   if (patient) {
     isPatientLocked.value = true
     formData.patient = patient.documentId
     formData.patientName = patient.Name
-    lockedPatientData.value = patient // ✅ 存下完整对象，备用
-    fetchNextSequence(patient.documentId)
+    lockedPatientData.value = patient
   } else {
     isPatientLocked.value = false
   }
 
-  // 3. 显示弹窗
+  // 3. 🟢 分支逻辑：编辑模式 vs 新建模式
+  if (treatmentToEdit) {
+    isEditMode.value = true
+    editingId.value = treatmentToEdit.documentId
+    
+    // 回填基础信息
+    formData.sequence_number = treatmentToEdit.sequence_number
+    // 处理 duration: 如果后端是 0 或 null, 回退默认 48
+    formData.base_duration = treatmentToEdit.duration || 48
+
+    // 🟢 核心：映射多病灶数据
+    if (treatmentToEdit.details && treatmentToEdit.details.length > 0) {
+      formData.lesions = treatmentToEdit.details.map((detail, idx) => {
+        // 映射图片：将 Strapi 格式转为 Uploader 需要的格式
+        const photos = detail.photos || []
+        const formattedPhotos = photos.map((img: any) => ({
+          id: img.id,
+          name: img.name,
+          url: img.url.startsWith('http') ? img.url : `${API_URL}${img.url}`
+        }))
+
+        return {
+          key: Date.now() + idx, // 唯一key
+          part: detail.part,
+          notes: detail.notes || '',
+          duration: detail.duration ?? undefined, // 可能是 null
+          initialPhotos: formattedPhotos // 传递给 Uploader
+        }
+      })
+    } else {
+        // 兼容旧数据或空数据：至少保留一行
+        formData.lesions = [{ key: Date.now(), part: '', notes: '', duration: undefined, initialPhotos: [] }]
+    }
+
+  } else {
+    // 新建模式
+    isEditMode.value = false
+    formData.lesions = [{ key: Date.now(), part: '', notes: '', duration: undefined, initialPhotos: [] }]
+    if (patient) fetchNextSequence(patient.documentId)
+  }
+
+  // 4. 显示弹窗
   visible.value = true
 
   watch(() => formData.patient, (newVal) => {
-    // 只有在非锁定模式，且有值的时候查
-    if (!isPatientLocked.value && newVal) {
+    if (!isPatientLocked.value && newVal && !isEditMode.value) {
       fetchNextSequence(newVal)
     }
   })
   
-  // 4. 重置校验状态 (等 DOM 更新后)
   nextTick(() => {
     formRef.value?.clearValidate()
   })
 }
 
-// 搜索患者 (仅在未锁定病人时使用)
 const searchPatients = async (query: string) => {
   if (query && !isPatientLocked.value) {
     patientLoading.value = true
@@ -169,7 +210,6 @@ const searchPatients = async (query: string) => {
   }
 }
 
-// 提交表单
 const handleSubmit = async () => {
   if (!formRef.value) return
 
@@ -177,110 +217,75 @@ const handleSubmit = async () => {
     if (valid) {
       formLoading.value = true
       try {
-        // ==========================================
-        // 1. 获取当前选中的患者对象
-        // ==========================================
         let currentPatient: Patient | undefined
 
         if (isPatientLocked.value) {
-          // 锁定模式：直接使用 open 时存下的对象
           currentPatient = lockedPatientData.value!
         } else {
-          // 搜索模式：去下拉选项数组里找对应的 ID
           currentPatient = patientOptions.value.find(
             p => p.documentId === formData.patient
           )
         }
 
-        // 🛡️ 防御性编程：如果没找到 currentPatient (理论不该发生)，给个默认兜底
-        if (!currentPatient) {
-            console.warn('未找到匹配的患者信息，将使用默认文件名规则');
+        if (!currentPatient && !isEditMode.value) {
+            console.warn('未找到匹配的患者信息');
         }
 
-        // ==========================================
-        // 2. 生成基础文件名前缀 (Base Prefix)
-        // ==========================================
+        // --- 生成文件名前缀 (仅新建文件使用) ---
         let baseFilePrefix = ''
-        //逻辑：优先用手动输入的序号 -> 其次用API查到的预判序号 -> 都没有就默认 1
         const finalCount = formData.sequence_number || predictedNextSequence.value
+        
+        // 即使是编辑模式，如果要上传新图，也需要生成这个前缀
+        // 如果 currentPatient 丢失 (极少见), 使用默认 Unknown
         if (currentPatient) {
-          // 2.1 姓名转拼音
           const nameStr = currentPatient.Name || 'Unknown'
-          const namePinyin = pinyin(nameStr, { 
-            toneType: 'none', 
-            type: 'array',    
-            v: true           
-          }).join('')
-          
-          // 2.2 性别
+          const namePinyin = pinyin(nameStr, { toneType: 'none', type: 'array', v: true }).join('')
           const rawGender = currentPatient.Gender || 'unknown'
           const gender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1)
-          
-          // 2.3 生日
-          const birthday = currentPatient.Birthday 
-            ? dayjs(currentPatient.Birthday).format('YYYYMMDD') 
-            : '00000000'
-
-          // 2.4 治疗日期
+          const birthday = currentPatient.Birthday ? dayjs(currentPatient.Birthday).format('YYYYMMDD') : '00000000'
           const today = dayjs().format('YYYYMMDDHHmm')
-
-          // 组合基础部分 (注意：这里还没加部位)
           baseFilePrefix = `${today}_${namePinyin}_${gender}_${birthday}_seq${finalCount}`
         } else {
           baseFilePrefix = `Unknown_${dayjs().format('YYYYMMDDHHmm')}_seq${finalCount}`
         }
 
-        // ==========================================
-        // 3. 循环处理每个病灶 (核心变更)
-        // ==========================================
+        // --- 收集 lesions 数据 ---
         const detailsPayload = []
 
-        // 遍历 formData.lesions 数组
         for (const [index, lesion] of formData.lesions.entries()) {
-          // A. 获取该行对应的上传组件实例
           const uploader = uploaderRefs.value.get(index)
           let imageIds: number[] = []
 
-          // B. 如果有上传组件，执行上传
           if (uploader) {
-            // 📝 最终文件名：基础前缀 + 当前部位
-            // 例: 20251230_LiSi_Male_19900101_Face
-            // 这里的 lesion.part 建议首字母大写，或者直接用 raw string
             const specificSuffix = `${baseFilePrefix}_${lesion.part || 'Part'}`
-            
-            // 执行上传并获取 ID 数组
+            // 🟢 修改：submitAll 内部会自动处理 新上传 vs 旧ID
             imageIds = await uploader.submitAll(specificSuffix)
           }
 
-          // C. 组装 Strapi Component 数据结构
           detailsPayload.push({
             part: lesion.part,
-            duration: lesion.duration, // 允许 undefined (继承父级)
-            photos: imageIds,           // 关联刚刚上传的图片 ID
-            notes: lesion.notes         // 备注信息
+            duration: lesion.duration,
+            photos: imageIds,
+            notes: lesion.notes 
           })
         }
 
-        // ==========================================
-        // 4. 构建 Strapi v5 提交数据
-        // ==========================================
         const submitData = {
           patient: formData.patient,
           sequence_number: formData.sequence_number,
-          duration: formData.base_duration, // ✅ 存入基准时长
-          
-          // ✅ 写入 details 组件数组
+          duration: formData.base_duration,
           details: detailsPayload 
-          
-          // ❌ 移除旧字段 target 和 Images
         }
 
-        // ==========================================
-        // 5. 发送请求
-        // ==========================================
-        await createTreatment(submitData)
+        // 🟢 分支：创建或更新
+        if (isEditMode.value) {
+            await updateTreatment(editingId.value, submitData)
+            ElMessage.success('治疗记录更新成功')
+        } else {
+            await createTreatment(submitData)
+            ElMessage.success('治疗记录创建成功')
+        }
         
-        ElMessage.success('治疗记录创建成功')
         visible.value = false
         emit('success')
         
@@ -294,24 +299,21 @@ const handleSubmit = async () => {
   })
 }
 
-// 窗口大小监听 (简单的防抖监听)
 window.addEventListener('resize', () => {
   width.value = window.innerWidth
 })
 
-// 动态计算弹窗宽度
 const dialogWidth = computed(() => {
   return isMobile.value ? '90%' : '600px'
 })
 
-// 暴露 open 方法给父组件
 defineExpose({ open })
 </script>
 
 <template>
   <el-dialog 
     v-model="visible" 
-    title="新建治疗记录" 
+    :title="isEditMode ? '编辑治疗记录' : '新建治疗记录'" 
     :width="dialogWidth" 
     :top="isMobile ? '4vh' : '5vh'"
     class="mobile-dialog"
@@ -330,9 +332,14 @@ defineExpose({ open })
         <h4 class="section-title">基础信息</h4>
         
         <el-form-item label="关联患者" prop="patient" :rules="[{ required: true, message: '请选择患者' }]">
-          <el-input v-if="isPatientLocked" :model-value="formData.patientName" disabled placeholder="已锁定当前患者">
+          <el-input 
+            v-if="isPatientLocked || isEditMode" 
+            :model-value="formData.patientName || (isEditMode ? '当前患者' : '')" 
+            disabled 
+            placeholder="已锁定"
+          >
              <template #prefix><el-icon><User /></el-icon></template>
-           </el-input>
+          </el-input>
            <el-select
           v-else
           v-model="formData.patient"
@@ -426,6 +433,7 @@ defineExpose({ open })
             <image-uploader 
               :ref="(el) => setUploaderRef(el, index)" 
               :limit="9" 
+              :initial-files="lesion.initialPhotos"
             />
           </el-form-item>
         </div>
@@ -434,44 +442,40 @@ defineExpose({ open })
 
     </el-form>
     
-
     <template #footer>
       <div class="dialog-footer">
         <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" :loading="formLoading" @click="handleSubmit">确定创建</el-button>
+        <el-button type="primary" :loading="formLoading" @click="handleSubmit">
+           {{ isEditMode ? '保存修改' : '确定创建' }}
+        </el-button>
       </div>
     </template>
   </el-dialog>
 </template>
 
 <style scoped>
+/* 样式保持不变 */
 .tips {
   font-size: 12px; 
   color: #909399; 
   margin-top: 4px; 
   line-height: 1.4;
 }
-
-/* 移动端按钮布局优化 */
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
 }
-
 @media screen and (max-width: 768px) {
-  /* 手机端让底部按钮撑满，更方便点击 */
   .dialog-footer {
     justify-content: stretch;
   }
   .dialog-footer button {
     flex: 1;
   }
-  
-  /* 调整 el-input-number 在手机上的显示，防止文字被切断 */
   :deep(.el-input-number .el-input__inner) {
     text-align: center;
     padding-left: 10px;
-    padding-right: 40px; /* 给右侧按钮留空间 */
+    padding-right: 40px; 
   }
 }
 .section-block { margin-bottom: 20px; }
@@ -487,26 +491,18 @@ defineExpose({ open })
 .list-leave-active {
   transition: all 0.3s linear;
 }
-
-/* 🟢 进入时的状态：从上方滑入 */
 .list-enter-from {
   opacity: 0;
   transform: translateY(-30px); 
 }
-
-/* 3. 🟢 离开状态：向上滑出并消失 (修改了这里) */
 .list-leave-to {
   opacity: 0;
-  /* 核心修改：改为负值，让它向上飘走，而不是缩小 */
   transform: translateY(30px); 
 }
-
-/* 🟢 核心魔法：离开的元素必须脱离文档流 */
 .list-leave-active {
-  position: absolute; /* 让它悬浮，不再占据空间 */
-  width: 100%;        /* 强制保持宽度，防止内容变形 */
-  left: 0;            /* 确保对齐 */
-  z-index: -1;        /* 让它退到后面，不要遮挡正在向上移动的元素 */
+  position: absolute; 
+  width: 100%;       
+  left: 0;           
+  z-index: -1;       
 }
 </style>
-
