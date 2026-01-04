@@ -19,7 +19,7 @@ import { TARGET_OPTIONS } from '../constants/treatment'
 // --- 环境变量 ---
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:1337'
 
-const props = defineProps<{
+defineProps<{
   defaultPatient?: { documentId: string; Name: string }
 }>()
 
