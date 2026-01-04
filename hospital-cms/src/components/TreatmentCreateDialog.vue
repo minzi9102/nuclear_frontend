@@ -28,7 +28,7 @@ const emit = defineEmits(['success'])
 const visible = ref(false)
 const formLoading = ref(false)
 const formRef = ref<FormInstance>()
-const uploaderRef = ref<InstanceType<typeof ImageUploader> | null>(null)
+
 const uploaderRefs = ref<Map<number, any>>(new Map())
 const predictedNextSequence = ref(1) // [新增] 预判的下一个序号，默认为 1
 
@@ -60,11 +60,6 @@ const formData = reactive({
     { key: Date.now(), part: '', notes: '', duration: undefined as number | undefined }
   ]
 })
-
-const rules = {
-  patient: [{ required: true, message: '请选择关联患者', trigger: 'change' }],
-  target: [{ required: true, message: '请选择治疗部位', trigger: 'change' }]
-}
 
 // --- 核心方法 ---
 
