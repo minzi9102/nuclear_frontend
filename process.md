@@ -1884,3 +1884,48 @@ Dev Context Snapshot [2026/01/04 23:05]
     Tech Stack: Vue 3 (Composition API), TypeScript, Element Plus.
 
     Deps: @element-plus/icons-vue (新增 Calendar 引用).
+
+Dev Context Snapshot [2026/01/05 21:55]
+1. 核心任务与状态
+
+    当前目标: 全链路压力测试 (后端数据灌入 & 前端大图渲染内存监控)
+
+    当前状态: 测试脚本调试完毕 / 待执行数据灌入与前端性能验证
+
+    关键文件:
+
+        stress_test.py: [已修复] 单条记录上传测试脚本 (修正字段映射错误 base_duration -> duration)
+
+        stress_test_full.py: [新增] 全生命周期压力测试脚本 (Patient -> Treatment -> Lesions -> Photos)
+
+        src/api/patient.ts: [参考] 确认了 API 关联查询策略
+
+2. 本次会话变动 (Changelog)
+
+    [新增] stress_test_full.py: 实现了多线程并发创建病人、多病灶治疗记录及批量图片上传的逻辑。
+
+    [修复] stress_test.py 400 报错: 修正 Python 脚本 Payload 键名，需匹配 Strapi 数据库字段 (duration) 而非前端临时变量 (base_duration)。
+
+    [逻辑] 确认 Python requests 导致的 ECONNRESET 为客户端主动断连，不影响服务端写入，可忽略。
+
+    [方案] 确定了 Chrome Performance Monitor (JS Heap) 为前端内存泄漏监控的首选工具。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 运行 stress_test_full.py 向系统灌入 GB 级测试数据。
+
+    TODO: 在 Vue 前端执行列表滚动与详情页开关测试，观察 Memory Footprint 趋势。
+
+    TODO: (后续) 应用文件名正则清洗逻辑 (replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '')) 以解决特殊字符导出问题。
+
+    RISK: 若前端 Canvas 导出未做压缩 (当前 3MB/张)，浏览器端 ZIP 打包 (Scheme A) 存在极高 OOM 风险。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Strapi v5, Vue 3, Python 3 (requests, concurrent.futures).
+
+    Data Model:
+
+        Treatment -> details (Component, Repeatable) -> photos (Media).
+
+    Test Config: 模拟单图 3MB，高并发写入场景。
