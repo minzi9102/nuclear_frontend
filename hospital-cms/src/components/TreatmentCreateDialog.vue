@@ -247,7 +247,11 @@ const handleSubmit = async () => {
         // 如果 currentPatient 丢失 (极少见), 使用默认 Unknown
         if (currentPatient) {
           const nameStr = currentPatient.Name || 'Unknown'
-          const namePinyin = pinyin(nameStr, { toneType: 'none', type: 'array', v: true }).join('')
+          // 🟢 核心修改：使用正则预处理，剔除除"汉字、字母、数字"以外的所有字符
+          // \u4e00-\u9fa5 匹配汉字, a-zA-Z0-9 匹配英文数字
+          // "张三·买买提" -> "张三买买提"
+          const cleanNameStr = nameStr.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '')
+          const namePinyin = pinyin(cleanNameStr, { toneType: 'none', type: 'array', v: true }).join('')
           const rawGender = currentPatient.Gender || 'unknown'
           const gender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1)
           const birthday = currentPatient.Birthday ? dayjs(currentPatient.Birthday).format('YYYYMMDD') : '00000000'
