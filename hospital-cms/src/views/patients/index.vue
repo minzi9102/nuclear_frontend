@@ -17,7 +17,7 @@ import { usePatientList } from './composables/usePatientList'
 // 初始化 Logic
 const { 
   loading, tableData, total, queryParams, advancedSearchForm, 
-  fetchData, handleDelete 
+  fetchData, handleDelete, handleReset
 } = usePatientList()
 
 // 组件引用
@@ -27,11 +27,7 @@ const treatmentCreateRef = ref()
 
 // 事件处理
 const handleSearch = () => { queryParams.page = 1; fetchData() }
-const handleReset = () => { 
-  advancedSearchForm.Name = ''; advancedSearchForm.Gender = ''; 
-  advancedSearchForm.birthdayRange = []; advancedSearchForm.past_treatments = []
-  handleSearch()
-}
+
 const handlePageChange = (val: number) => { queryParams.page = val; fetchData() }
 
 // 交互操作

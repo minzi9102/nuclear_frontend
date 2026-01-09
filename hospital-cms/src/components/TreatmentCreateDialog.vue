@@ -9,8 +9,9 @@ import { User } from '@element-plus/icons-vue'
 import ImageUploader from '../components/ImageUploader/index.vue'
 
 // API 引入
+// 🟢 修改：引入 searchPatients
 import { createTreatment, updateTreatment, getLastSequenceNumber } from '../api/treatment'
-import { getPatientList } from '../api/patient'
+import { searchPatients } from '../api/patient' 
 import type { Patient, Treatment } from '../api/types'
 
 // 常量引入
@@ -42,7 +43,7 @@ const patientOptions = ref<Patient[]>([])
 const isPatientLocked = ref(false)
 const lockedPatientData = ref<Patient | null>(null)
 
-// 🟢 新增：编辑模式状态
+// 编辑模式状态
 const isEditMode = ref(false)
 const editingId = ref<string>('')
 
@@ -50,7 +51,6 @@ const width = ref(window.innerWidth)
 const isMobile = computed(() => width.value < 768)
 
 // 表单模型
-// 🟢 修改：lesions 增加 initialPhotos 字段 (仅用于前端传递数据给 Uploader)
 const formData = reactive({
   patient: '' as string,
   patientName: '' as string,
@@ -63,10 +63,17 @@ const formData = reactive({
       part: '', 
       notes: '', 
       duration: undefined as number | undefined,
-      initialPhotos: [] as any[] // 🟢 增加此字段用于回显
+      initialPhotos: [] as any[]
     }
   ]
 })
+
+// --- 辅助方法 ---
+// 🟢 新增：计算年龄
+const calculateAge = (birthday: string) => {
+  if (!birthday) return '?'
+  return dayjs().diff(dayjs(birthday), 'year')
+}
 
 // --- 核心方法 ---
 
@@ -108,25 +115,19 @@ const removeLesion = (index: number) => {
 
   if (formData.lesions.length === 1) {
     const remainingLesion = formData.lesions[0];
-    // 只有当 remainingLesion 真的存在时才操作
     if (remainingLesion) {
       remainingLesion.duration = undefined;
     }
   }
 }
 
-/**
- * 🟢 修改：打开弹窗的方法 (支持编辑)
- * @param patient 患者对象
- * @param treatmentToEdit (可选) 需要编辑的治疗记录对象
- */
 const open = (patient?: Patient, treatmentToEdit?: Treatment) => {
   // 1. 重置表单基础状态
   formData.patient = ''
   formData.patientName = '' 
   formData.sequence_number = undefined
   formData.base_duration = 48
-  formData.lesions = [] // 先清空，后面根据情况填充
+  formData.lesions = [] 
   uploaderRefs.value.clear()
 
   patientOptions.value = []
@@ -144,22 +145,19 @@ const open = (patient?: Patient, treatmentToEdit?: Treatment) => {
     lockedPatientData.value = patient
   } else {
     isPatientLocked.value = false
+    // 🟢 优化：非锁定模式下，不预加载列表，等待用户搜索
   }
 
-  // 3. 🟢 分支逻辑：编辑模式 vs 新建模式
+  // 3. 分支逻辑：编辑模式 vs 新建模式
   if (treatmentToEdit) {
     isEditMode.value = true
     editingId.value = treatmentToEdit.documentId
     
-    // 回填基础信息
     formData.sequence_number = treatmentToEdit.sequence_number
-    // 处理 duration: 如果后端是 0 或 null, 回退默认 48
     formData.base_duration = treatmentToEdit.duration || 48
 
-    // 🟢 核心：映射多病灶数据
     if (treatmentToEdit.details && treatmentToEdit.details.length > 0) {
       formData.lesions = treatmentToEdit.details.map((detail, idx) => {
-        // 映射图片：将 Strapi 格式转为 Uploader 需要的格式
         const photos = detail.photos || []
         const formattedPhotos = photos.map((img: any) => ({
           id: img.id,
@@ -168,26 +166,23 @@ const open = (patient?: Patient, treatmentToEdit?: Treatment) => {
         }))
 
         return {
-          key: Date.now() + idx, // 唯一key
+          key: Date.now() + idx, 
           part: detail.part,
           notes: detail.notes || '',
-          duration: detail.duration ?? undefined, // 可能是 null
-          initialPhotos: formattedPhotos // 传递给 Uploader
+          duration: detail.duration ?? undefined,
+          initialPhotos: formattedPhotos
         }
       })
     } else {
-        // 兼容旧数据或空数据：至少保留一行
         formData.lesions = [{ key: Date.now(), part: '', notes: '', duration: undefined, initialPhotos: [] }]
     }
 
   } else {
-    // 新建模式
     isEditMode.value = false
     formData.lesions = [{ key: Date.now(), part: '', notes: '', duration: undefined, initialPhotos: [] }]
     if (patient) fetchNextSequence(patient.documentId)
   }
 
-  // 4. 显示弹窗
   visible.value = true
 
   watch(() => formData.patient, (newVal) => {
@@ -201,20 +196,30 @@ const open = (patient?: Patient, treatmentToEdit?: Treatment) => {
   })
 }
 
-const searchPatients = async (query: string) => {
-  if (query && !isPatientLocked.value) {
-    patientLoading.value = true
-    try {
-      const res: any = await getPatientList({
-        'filters[Name][$contains]': query,
-        'pagination[limit]': 10,
-      } as any)
-      patientOptions.value = res.data?.data || res.data || []
-    } catch (error) {
-      console.error(error)
-    } finally {
-      patientLoading.value = false
-    }
+// 🟢 修改：使用 searchPatients API
+const onSearchPatients = async (query: string) => {
+  if (!query) return
+  if (isPatientLocked.value) return
+
+  patientLoading.value = true
+  try {
+    // 调用新的轻量级搜索接口 (支持 ID 或 姓名)
+    const res: any = await searchPatients(query)
+    if (res.data && Array.isArray(res.data.data)) {
+        patientOptions.value = res.data.data
+      } 
+      // 兼容某些拦截器可能已经解了一层包的情况
+      else if (Array.isArray(res.data)) {
+        patientOptions.value = res.data
+      } 
+      else {
+        patientOptions.value = []
+      }
+  } catch (error) {
+    console.error('搜索患者失败', error)
+    patientOptions.value = []
+  } finally {
+    patientLoading.value = false
   }
 }
 
@@ -236,26 +241,24 @@ const handleSubmit = async () => {
         }
 
         if (!currentPatient && !isEditMode.value) {
-            console.warn('未找到匹配的患者信息');
+           console.warn('未找到匹配的患者信息');
         }
 
-        // --- 生成文件名前缀 (仅新建文件使用) ---
+        // --- 生成文件名前缀 ---
         let baseFilePrefix = ''
         const finalCount = formData.sequence_number || predictedNextSequence.value
         
-        // 即使是编辑模式，如果要上传新图，也需要生成这个前缀
-        // 如果 currentPatient 丢失 (极少见), 使用默认 Unknown
         if (currentPatient) {
           const nameStr = currentPatient.Name || 'Unknown'
-          // 🟢 核心修改：使用正则预处理，剔除除"汉字、字母、数字"以外的所有字符
-          // \u4e00-\u9fa5 匹配汉字, a-zA-Z0-9 匹配英文数字
-          // "张三·买买提" -> "张三买买提"
           const cleanNameStr = nameStr.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '')
           const namePinyin = pinyin(cleanNameStr, { toneType: 'none', type: 'array', v: true }).join('')
+          
           const rawGender = currentPatient.Gender || 'unknown'
           const gender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1)
+          
           const birthday = currentPatient.Birthday ? dayjs(currentPatient.Birthday).format('YYYYMMDD') : '00000000'
           const today = dayjs().format('YYYYMMDDHHmm')
+          
           baseFilePrefix = `${today}_${namePinyin}_${gender}_${birthday}_seq${finalCount}`
         } else {
           baseFilePrefix = `Unknown_${dayjs().format('YYYYMMDDHHmm')}_seq${finalCount}`
@@ -270,7 +273,6 @@ const handleSubmit = async () => {
 
           if (uploader) {
             const specificSuffix = `${baseFilePrefix}_${lesion.part || 'Part'}`
-            // 🟢 修改：submitAll 内部会自动处理 新上传 vs 旧ID
             imageIds = await uploader.submitAll(specificSuffix)
           }
 
@@ -289,7 +291,6 @@ const handleSubmit = async () => {
           details: detailsPayload 
         }
 
-        // 🟢 分支：创建或更新
         if (isEditMode.value) {
             await updateTreatment(editingId.value, submitData)
             ElMessage.success('治疗记录更新成功')
@@ -352,25 +353,30 @@ defineExpose({ open })
           >
              <template #prefix><el-icon><User /></el-icon></template>
           </el-input>
-           <el-select
-          v-else
-          v-model="formData.patient"
-          filterable
-          remote
-          reserve-keyword
-          placeholder="请输入患者姓名搜索"
-          :remote-method="searchPatients"
-          :loading="patientLoading"
-          style="width: 100%"
-        >
-        <el-option
-            v-for="item in patientOptions"
-            :key="item.documentId"
-            :label="`${item.Name} (${item.Gender === 'male' ? '男' : '女'})`"
-            :value="item.documentId"
-          />
+          <el-select
+            v-else
+            v-model="formData.patient"
+            filterable
+            remote
+            reserve-keyword
+            placeholder="搜索姓名或ID..."
+            :remote-method="onSearchPatients"
+            :loading="patientLoading"
+            style="width: 100%"
+          >
+             <el-option
+                v-for="item in patientOptions"
+                :key="item.documentId"
+                :label="item.Name"
+                :value="item.documentId"
+             >
+                <span style="float: left">{{ item.Name }}</span>
+                <span style="float: right; color: #8492a6; font-size: 13px">
+                  {{ item.Gender === 'male' ? '男' : '女' }} | {{ calculateAge(item.Birthday) }}岁
+                </span>
+             </el-option>
           </el-select>
-      </el-form-item>
+        </el-form-item>
 
         <el-row :gutter="20">
           <el-col :xs="24" :sm="12">
@@ -468,7 +474,6 @@ defineExpose({ open })
 </template>
 
 <style scoped>
-/* 样式保持不变 */
 .tips {
   font-size: 12px; 
   color: #909399; 
@@ -520,12 +525,10 @@ defineExpose({ open })
   z-index: -1;       
 }
 
-/* 当处于继承状态时，文字颜色变淡，提示用户这是默认值 */
 .duration-input.is-inherited :deep(.el-input__inner) {
-  color: #9ca3af; /* text-gray-400 */
+  color: #9ca3af; 
 }
 
-/* 一旦修改（变为特殊时长），ElInputNumber 默认黑色，或者你可以加粗 */
 .duration-input :deep(.el-input__inner) {
   font-weight: 500;
 }

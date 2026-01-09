@@ -2109,3 +2109,62 @@ Dev Context Snapshot [2026/01/09 16:35]
         VITE_API_URL: 必须指向真实后端地址。
 
         Strapi Filter: 使用 filters[$or][0]... 格式处理混合字段查询。
+
+# Dev Context Snapshot [2026/01/09 18:30]
+1. 核心任务与状态
+
+    当前目标: 优化患者列表搜索交互（即时过滤、重置、日期选择）及适配 Strapi v5 查询逻辑。
+
+    当前状态: ✅ 已完成 / 已验证
+
+    关键文件:
+
+        src/views/patients/components/PatientSearch.vue: [UI重构] 搜索框改回 Input 防抖，新增圆形重置按钮，日期改用拆分式月份选择。
+
+        src/views/patients/composables/usePatientList.ts: [逻辑重构] 实现 Name/ID 混合搜索，修复 populate limit 报错，封装 handleReset。
+
+        src/views/patients/index.vue: [清理] 移除冗余逻辑，直接调用 hook 导出的方法。
+
+2. 本次会话变动 (Changelog)
+
+    [重构] 搜索交互:
+
+        弃用 el-select 远程搜索，回退为 el-input + 500ms 防抖。
+
+        实现了“输入即过滤”模式，无需手动选中。
+
+    [修复] API 查询逻辑:
+
+        修改 fetchData: 使用 filters[$or] 同时匹配 Name ($containsi) 和 documentId ($contains)。
+
+        修复 Strapi v5 报错: 移除 populate: { treatments: { limit: 1 } }，解决了 ValidationError: Invalid key limit。
+
+    [新增] 重置功能:
+
+        usePatientList.ts: 新增 handleReset 重置所有状态并刷新。
+
+        UI: 在搜索栏新增圆形图标 (circle) 重置按钮。
+
+    [优化] 日期选择器 (Mobile适配):
+
+        将 daterange 改为两个独立的 type="month" 选择器。
+
+        属性配置: value-format="YYYY-MM-01", format="YYYY年MM月", :editable="false" (禁止手机软键盘)。
+
+        引入 element-plus/es/locale/lang/zh-cn 实现月份汉化。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    RISK: 列表页 API 移除了 treatments 的 limit: 1 限制（Strapi v5 不支持）。若单人治疗记录过多，可能导致列表页 Payload 增大，需关注性能或改用 GraphQL/自定义 Controller。
+
+    TODO: 在真机验证拆分式月份选择器在窄屏下的 Flex 布局换行表现。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3, TypeScript, Element Plus, Strapi v5 REST API.
+
+    Config:
+
+        Element Plus Locale: zh-cn.
+
+        API Query: qs library (implicit dependency for complex filters).
