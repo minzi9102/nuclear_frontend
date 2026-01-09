@@ -1929,3 +1929,183 @@ Dev Context Snapshot [2026/01/05 21:55]
         Treatment -> details (Component, Repeatable) -> photos (Media).
 
     Test Config: 模拟单图 3MB，高并发写入场景。
+
+# Dev Context Snapshot [2026/01/07 17:30]
+
+## 1. 核心任务与状态
+
+### 当前目标
+生产环境离线部署包构建 (Windows + Nginx + Node.js + SQLite + NAS)
+
+### 当前状态
+已完成 / 已验证 (全链路跑通：局域网访问、NAS 图片加载、本地旧图加载)
+
+### 关键文件
+
+| 文件 | 作用 | 说明 |
+|------|------|------|
+| `nginx/conf/nginx.conf` | [核心] | 配置反向代理、静态托管及图片路径重写规则 |
+| `backend/config/database.ts` | [修改] | SQLite 路径指向持久化目录 backend/data/ |
+| `frontend/.env.production` | [配置] | VITE_API_URL=/api (相对路径策略) |
+| `start.bat` | [新增] | 一键启动脚本 (Node Backend + Nginx) |
+
+---
+
+## 2. 本次会话变动 (Changelog)
+
+- **[架构]** 构建了 Hospital-CMS-Prod 离线交付文件夹，包含 Frontend dist, Backend build, Nginx, Node MSI。
+- **[修复]** Nginx 增加 `rewrite ^/api/uploads/(.*)$ /uploads/$1 break;` 解决带 /api 前缀的图片 404 问题。
+- **[修复]** Nginx 增加 `location /uploads/` 规则，指向 backend/public/uploads 以支持旧数据的本地图片查看。
+- **[配置]** 修正 `config/database.ts` 移除 .tmp 路径依赖，防止生产环境数据丢失。
+- **[运维]** 验证了 Windows 防火墙 (Port 80) 及 局域网 IP 访问方案。
+
+---
+
+## 3. 挂起的任务与已知问题 (CRITICAL)
+
+### TODO 清单
+
+- [ ] 部署至新机器时，需手动安装 `tools/node-v20-x64.msi`。
+- [ ] 部署后需在新机器配置 Windows 防火墙入站规则 (TCP 80)。
+
+### RISK（风险项）
+
+⚠️ **宿主机若无静态 IP**，路由器重启可能导致 IP 变更，影响移动端访问。
+
+### NOTE（重要提醒）
+
+📌 必须手动将开发机的 `backend/public/uploads` 内容复制到生产包对应目录。
+
+---
+
+## 4. 环境与依赖上下文
+
+### Tech Stack
+- Vue 3
+- Strapi v5
+- SQLite
+- Nginx (Windows)
+- PM2/Node Scripts
+- MinIO (NAS)
+
+### 网络拓扑 (Topology)
+```
+Windows Host (App+DB) <-> LAN <-> Infortrend NAS (Storage)
+```
+
+### 配置参数 (Config)
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `VITE_API_URL` | `/api` | 需要 Nginx 反向代理 |
+| `NAS_ENDPOINT` | 需指向实验室真实 IP | 例如 `http://192.168.1.215:9000` |
+
+---
+
+# Dev Context Snapshot [2026/01/09 14:45]
+1. 核心任务与状态
+
+    当前目标: 完成实验室环境 Docker 离线部署验证，启动“图片导出功能”开发。
+
+    当前状态: 部署架构已冻结 (Ready) / 新功能开发待启动 (Pending)。
+
+    关键文件:
+
+        docker-compose.yml: [已定稿] 包含 Backend, Nginx (Frontend), DB Backup 服务，适配离线镜像模式。
+
+        frontend/nginx.conf: [已修复] 移除了非法的 http/events 嵌套，修正了 /api 及 /uploads 的反向代理规则。
+
+        db_backup/Dockerfile: [新增] 集成阿里云源与 sqlite/tzdata，用于离线环境数据库备份。
+
+2. 本次会话变动 (Changelog)
+
+    [架构] 确立生产环境部署策略：开发机构建 (npm run build + docker build) -> docker save 导出 tar 包 -> 生产机 docker load。
+
+    [修复] 解决了 Nginx 容器启动报错 "worker_processes" directive is not allowed，原因是配置文件层级冲突。
+
+    [修复] 解决了 Alpine 容器 apk add TLS 报错，通过 sed -i 替换为 mirrors.aliyun.com 源。
+
+    [安全] 确认 .dockerignore 包含 .env，敏感配置通过 docker-compose.yml 的 env_file 在运行时注入。
+
+    [运维] 制定了基于镜像替换 (Immutable Infrastructure) 的版本更新与回滚流程。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 开发图片导出功能 (需确认是前端打包还是后端流式下载)。
+
+    TODO: 验证 NAS 生产环境的端口映射 (80 -> 8088) 是否会导致重定向丢失端口问题。
+
+    NOTE: 生产环境数据库备份依赖 db_backup 容器，恢复时需停止 Strapi 容器以解除文件锁定。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Docker Compose, Strapi v5 (Node 20), Vue 3 + Nginx (Alpine), SQLite (File-based), MinIO (NAS).
+
+    Config:
+
+        前端构建: VITE_API_URL=/api (相对路径，依赖 Nginx 转发)。
+
+        后端运行: NAS_ENDPOINT 必须为真实局域网 IP (非 localhost)。
+
+        挂载卷: cms_data (DB), backend/public/uploads (Local Storage Backup)。
+
+Dev Context Snapshot [2026/01/09 16:35]
+1. 核心任务与状态
+
+    当前目标: 完成科研影像批量导出功能及治疗记录列表的高级筛选交互优化（远程搜索+分层布局）。
+
+    当前状态: ✅ 已完成 / 已验证
+
+    关键文件:
+
+        src/views/treatments/index.vue: [UI 重构为分层布局，集成远程患者搜索 Select]
+
+        src/api/patient.ts: [新增 searchPatients 轻量级搜索接口]
+
+        src/api/treatment.ts: [新增 getExportUrl 导出链接生成函数]
+
+        src/api/treatment/services/export.js: [后端流式 Zip 导出逻辑实现]
+
+2. 本次会话变动 (Changelog)
+
+    [重构] UI 布局: 实施 Scheme 1 (分层布局)。Top Row: 标题+全局操作(导出/新建)；Bottom Row: 筛选控件+查询按钮。
+
+    [重构] 患者筛选逻辑:
+
+        Input -> Remote Select: 替换文本输入框为 el-select 远程搜索。
+
+        API: 新增 searchPatients(query)，仅返回 Name, Gender, Birthday, documentId，支持 $or (Name/ID) 匹配。
+
+        交互: 实现 300ms 防抖，自定义 Option 模板显示 "姓名 | 性别 | 年龄"。
+
+        参数: 筛选字段由模糊匹配 patientName 变更为精确匹配 patientId (documentId)。
+
+    [新增] 导出功能:
+
+        前端: 复用列表筛选参数 (buildApiParams)，通过 hidden iframe 触发后端流式下载。
+
+        后端: export-service 实现 Strategy B (优先导出 details 组件数据，回退导出 Images 旧数据)。
+
+    [修复] API 响应解包: 修正 searchPatientMethod 中 Strapi v5 响应结构读取错误 (res.data.data vs res.data)。
+
+    [修复] 类型错误: 修正 filters.dateRange 初始化类型断言错误 (改为 null) 及 handleReset 字段引用错误。
+
+3. 挂起的任务与已知问题 (CRITICAL)
+
+    TODO: 将 searchPatients 的远程搜索逻辑与 UI 模式 (Name|Gender|Age) 复用到 TreatmentCreateDialog.vue 等其他需要选人的组件中。
+
+    TODO: 推进 Phase 6 生产环境 Docker 部署 (Nginx 反代 + NAS 挂载验证)。
+
+    RISK: Strapi v5 对 $or 查询的数组格式要求严格，需确保 qs.stringify 配置了 arrayFormat: 'indices'。
+
+4. 环境与依赖上下文
+
+    Tech Stack: Vue 3, Element Plus, Strapi v5 (Node 20).
+
+    Deps: dayjs (新增), qs (关键配置 encodeValuesOnly: true).
+
+    Config:
+
+        VITE_API_URL: 必须指向真实后端地址。
+
+        Strapi Filter: 使用 filters[$or][0]... 格式处理混合字段查询。

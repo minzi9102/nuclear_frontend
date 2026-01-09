@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { Search, Refresh, Plus, Delete, Timer, Calendar, EditPen, Picture, Edit } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Delete, Timer, Calendar, EditPen, Picture, Download, Male, Female } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { TARGET_OPTIONS } from '../../constants/treatment'; // 引入部位选项
+import dayjs from 'dayjs'; // 建议安装: npm install dayjs
 
 // 组件引入
 import TreatmentCreateDialog from '../../components/TreatmentCreateDialog.vue'
 
 // API 引入
-import { getTreatmentList, deleteTreatment } from '../../api/treatment'
-import type { Treatment, StrapiMedia } from '../../api/types'
+import { getTreatmentList, deleteTreatment, getExportUrl } from '../../api/treatment'
+import { searchPatients } from '../../api/patient'
+import type { Treatment, StrapiMedia, Patient } from '../../api/types'
 
 // 常量引入
 import { TREATMENT_TARGET_MAP } from '../../constants/treatment';
@@ -19,19 +22,40 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1337'
 // --- 列表数据 ---
 const tableData = ref<Treatment[]>([])
 const loading = ref(false)
-const total = ref(0)
-const queryParams = reactive({
+// --- 状态管理 ---
+// 分页状态
+const pagination = reactive({
   page: 1,
-  pageSize: 10,
-  treatmentNo: ''
+  pageSize: 10
 })
+
+// ⚠️ 修改筛选状态定义
+const filters = reactive({
+  patientId: '', // [修改] 从 patientName 改为 patientId (存储 documentId)
+  target: '',
+  dateRange: null as [Date, Date] | null 
+})
+
+// 总数 (用于控制导出按钮禁用状态)
+const total = ref(0)
+
+// 远程搜索相关状态
+const searchLoading = ref(false)
+const patientOptions = ref<Patient[]>([])
+// 用于计算年龄的简单工具函数
+const calculateAge = (birthday: string) => {
+  if (!birthday) return '-'
+  const age = new Date().getFullYear() - new Date(birthday).getFullYear()
+  return age >= 0 ? age : '-'
+}
 
 // --- 响应式判断 ---
 const isMobile = ref(false)
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 768
 }
-
+// --- 新增：导出状态 ---
+const exportLoading = ref(false)
 // --- 组件引用 ---
 const treatmentCreateRef = ref<InstanceType<typeof TreatmentCreateDialog> | null>(null)
 
@@ -62,33 +86,134 @@ const getTreatmentImages = (row: Treatment): StrapiMedia[] => {
   return row.Images || []
 }
 
+/**
+ * 🏗️ 构建 Strapi 查询参数
+ * 将前端的 UI 筛选状态转换为后端 API 需要的 filters 对象
+ */
+const buildApiParams = () => {
+  const apiFilters: any = {}
+
+  // [修改] 1. 患者精确筛选 (改用 documentId)
+  if (filters.patientId) {
+    apiFilters['filters[patient][documentId][$eq]'] = filters.patientId
+  }
+
+  // 2. 日期范围筛选 (创建时间)
+  if (filters.dateRange && filters.dateRange.length === 2) {
+    const start = dayjs(filters.dateRange[0]).startOf('day').toISOString()
+    const end = dayjs(filters.dateRange[1]).endOf('day').toISOString()
+    
+    apiFilters['filters[createdAt][$gte]'] = start
+    apiFilters['filters[createdAt][$lte]'] = end
+  }
+
+  // 3. 治疗部位筛选 (难点：新旧数据混合查询)
+  // 逻辑：Target = "Face"  =>  (Legacy.target == "Face") OR (New.details.part == "Face")
+  if (filters.target) {
+    apiFilters['filters[$or][0][target][$eq]'] = filters.target
+    apiFilters['filters[$or][1][details][part][$eq]'] = filters.target
+  }
+  
+  // 保留原来的 treatmentNo 搜索吗？
+  // 如果产品需求移除了它，这里就不加。如果需要保留作为备用，可以加在这里。
+
+  return apiFilters
+}
+
+// --- 新增：处理导出 ---
+// 2. 导出处理
+const handleExport = () => {
+  if (total.value === 0) return // 防御性检查
+
+  ElMessageBox.confirm(
+    `当前筛选命中 ${total.value} 条记录，确认导出吗？`,
+    '导出确认',
+    {
+      confirmButtonText: '确认导出',
+      cancelButtonText: '取消',
+      type: 'info'
+    }
+  ).then(() => {
+    // 逻辑与 fetchData 完全一致
+    const filterParams = buildApiParams()
+    const url = getExportUrl(filterParams)
+    
+    // 触发下载
+    const iframe = document.createElement('iframe')
+    iframe.style.display = 'none'
+    iframe.src = url
+    document.body.appendChild(iframe)
+    
+    ElMessage.success('导出任务已开始，请留意浏览器下载')
+    setTimeout(() => document.body.removeChild(iframe), 5000)
+  })
+}
+
+// 防抖计时器
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+const searchPatientMethod = (query: string) => {
+  if (!query) {
+    patientOptions.value = []
+    return
+  }
+  
+  searchLoading.value = true
+  
+  if (searchTimer) clearTimeout(searchTimer)
+  
+  searchTimer = setTimeout(async () => {
+    try {
+      const res: any = await searchPatients(query)
+      
+      // 🔍 调试：建议打开控制台确认一下真实结构
+      // console.log('API Response:', res) 
+
+      // 🛠️ 修复：兼容 Strapi v5 的嵌套结构
+      // 如果 res.data 是对象且包含 data 数组，说明是 { data: [...], meta: ... } 结构
+      if (res.data && Array.isArray(res.data.data)) {
+        patientOptions.value = res.data.data
+      } 
+      // 兼容某些拦截器可能已经解了一层包的情况
+      else if (Array.isArray(res.data)) {
+        patientOptions.value = res.data
+      } 
+      else {
+        patientOptions.value = []
+      }
+    } catch (error) {
+      console.error('搜索患者失败', error)
+      patientOptions.value = []
+    } finally {
+      searchLoading.value = false
+    }
+  }, 50)
+}
 // --- 核心逻辑 ---
 
 // 1. 获取列表
 const fetchData = async () => {
   loading.value = true
   try {
+    // 获取筛选参数
+    const filterParams = buildApiParams()
+
     const apiParams: any = {
-      'pagination[page]': queryParams.page,
-      'pagination[pageSize]': queryParams.pageSize,
-      // 🟢 核心修改：深度 Populate 以获取 details 组件及其图片
+      'pagination[page]': pagination.page,      // 改用 pagination 对象
+      'pagination[pageSize]': pagination.pageSize,
       populate: {
         patient: true,
-        Images: true, // 兼容旧数据
-        details: {
-          populate: 'photos'
-        }
+        Images: true,
+        details: { populate: 'photos' }
       },
       sort: 'updatedAt:desc',
-    }
-    if (queryParams.treatmentNo) {
-      apiParams['filters[treatmentNo][$contains]'] = queryParams.treatmentNo
+      ...filterParams // 展开筛选参数
     }
 
     const res: any = await getTreatmentList(apiParams)
     if (res.data) {
       tableData.value = res.data.data || res.data || []
-      total.value = res.data.meta?.pagination?.total || res.meta?.pagination?.total || 0
+      total.value = res.data.meta?.pagination?.total || 0
     }
   } catch (error) {
     console.error(error)
@@ -121,8 +246,20 @@ const handleDelete = (row: Treatment) => {
     })
 }
 
-const handleSearch = () => { queryParams.page = 1; fetchData() }
-const handleCurrentChange = (val: number) => { queryParams.page = val; fetchData() }
+// 3. 重置筛选
+const handleReset = () => {
+  filters.patientId = ''
+  filters.target = ''
+  filters.dateRange = null
+  pagination.page = 1 // 重置回第一页
+  fetchData()
+}
+// 4. 搜索触发
+const handleSearch = () => {
+  pagination.page = 1
+  fetchData()
+}
+const handleCurrentChange = (val: number) => { pagination.page = val; fetchData() }
 
 // 生命周期
 onMounted(() => {
@@ -139,26 +276,98 @@ onUnmounted(() => {
 <template>
   <div class="app-container">
     <el-card shadow="never" :body-style="{ padding: isMobile ? '10px' : '20px' }">
-      <div class="filter-container" :class="{ 'is-mobile': isMobile }">
-        <div class="search-section">
-          <el-input 
-            v-model="queryParams.treatmentNo" 
-            placeholder="搜索治疗编号..." 
-            class="search-input" 
-            :size="isMobile ? 'default' : 'large'"
-            clearable 
-            @clear="handleSearch" 
-            @keyup.enter="handleSearch"
-          >
-            <template #append><el-button :icon="Search" @click="handleSearch" /></template>
-          </el-input>
+      <div class="filter-wrapper-layered" :class="{ 'is-mobile': isMobile }">
+        
+        <div class="operation-row">
+          <div class="left-panel">
+            <span class="page-title">治疗记录管理</span>
+          </div>
+          <div class="right-panel">
+            <el-button 
+              type="success" 
+              :icon="Download" 
+              :disabled="total === 0" 
+              plain
+              :size="isMobile ? 'small' : 'default'"
+              @click="handleExport"
+            >
+              {{ isMobile ? '导出' : `导出结果 (${total})` }}
+            </el-button>
+
+            <el-button 
+              type="primary" 
+              :icon="Plus" 
+              :size="isMobile ? 'small' : 'default'"
+              @click="handleCreate"
+            >
+              新建记录
+            </el-button>
+          </div>
         </div>
-        <div class="action-section">
-          <el-button type="primary" :icon="Plus" :size="isMobile ? 'default' : 'large'" @click="handleCreate">
-            新建治疗记录
-          </el-button>
-          <el-button :icon="Refresh" circle :size="isMobile ? 'default' : 'large'" @click="fetchData" />
+
+        <div class="search-row">
+          <div class="search-inputs">
+            <el-select
+              v-model="filters.patientId"
+              filterable
+              remote
+              clearable
+              placeholder="搜姓名或ID"
+              :remote-method="searchPatientMethod"
+              :loading="searchLoading"
+              class="filter-item w-name"
+              @change="handleSearch"
+            >
+              <el-option
+                v-for="item in patientOptions"
+                :key="item.documentId"
+                :label="item.Name"
+                :value="item.documentId"
+              >
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                  <span style="font-weight: bold;">{{ item.Name }}</span>
+                  <span style="color: #8492a6; font-size: 12px; transform: scale(0.9);">
+                    <el-icon v-if="item.Gender === 'male'" style="color: #409EFF; margin-right:2px; vertical-align: middle;"><Male /></el-icon>
+                    <el-icon v-else style="color: #F56C6C; margin-right:2px; vertical-align: middle;"><Female /></el-icon>
+                    {{ calculateAge(item.Birthday) }}岁
+                  </span>
+                </div>
+              </el-option>
+            </el-select>
+
+            <el-select 
+              v-model="filters.target" 
+              placeholder="治疗部位" 
+              clearable 
+              class="filter-item w-target"
+              @change="handleSearch"
+            >
+              <el-option 
+                v-for="opt in TARGET_OPTIONS" 
+                :key="opt.value" 
+                :label="opt.label" 
+                :value="opt.value" 
+              />
+            </el-select>
+
+            <el-date-picker
+              v-model="filters.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              class="filter-item w-date"
+              value-format="YYYY-MM-DD"
+              @change="handleSearch"
+            />
+          </div>
+
+          <div class="search-btns">
+            <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+            <el-button :icon="Refresh" @click="handleReset">重置</el-button>
+          </div>
         </div>
+
       </div>
 
       <div v-loading="loading" class="data-wrapper">
@@ -388,15 +597,13 @@ onUnmounted(() => {
 
       </div>
 
-      <div class="pagination-container" :class="{ 'is-mobile': isMobile }">
+      <div class="pagination-container">
         <el-pagination 
-          v-model:current-page="queryParams.page" 
-          v-model:page-size="queryParams.pageSize" 
+          v-model:current-page="pagination.page" 
+          v-model:page-size="pagination.pageSize" 
           :total="total" 
-          :pager-count="5"
-          :layout="isMobile ? 'prev, pager, next' : 'total, prev, pager, next, sizes'"
-          :small="isMobile"
-          @current-change="handleCurrentChange" 
+          layout="total, prev, pager, next"
+          @current-change="handleCurrentChange"
         />
       </div>
     </el-card>
@@ -410,6 +617,26 @@ onUnmounted(() => {
 
 <style scoped>
 .app-container { padding: 20px; }
+
+.filter-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: 1;
+}
+
+.filter-item {
+  margin-bottom: 5px; /* 防止折行时挤压 */
+}
 
 /* 响应式容器调整 */
 @media screen and (max-width: 768px) {
@@ -769,5 +996,132 @@ onUnmounted(() => {
   background-color: #fffbeb;
   border-color: #fcd34d;
   color: #b45309;
+}
+
+/* 控件宽度控制 */
+.w-name { width: 160px; }
+.w-target { width: 140px; }
+.w-date { width: 320px !important; } /* DatePicker 默认宽度较宽，强制覆盖 */
+
+.action-section {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* 移动端适配 */
+.filter-wrapper.is-mobile {
+  flex-direction: column;
+}
+.filter-wrapper.is-mobile .filter-controls {
+  width: 100%;
+  flex-direction: column;
+}
+.filter-wrapper.is-mobile .filter-item,
+.filter-wrapper.is-mobile .w-name,
+.filter-wrapper.is-mobile .w-target,
+.filter-wrapper.is-mobile .w-date {
+  width: 100% !important;
+}
+.filter-wrapper.is-mobile .action-section {
+  width: 100%;
+  justify-content: space-between;
+}
+.filter-wrapper.is-mobile .action-section .el-button {
+  flex: 1;
+}
+
+.filter-wrapper-layered {
+  display: flex;
+  flex-direction: column;
+  gap: 15px; /* 两行之间的垂直间距 */
+  margin-bottom: 20px;
+}
+
+/* 第一行：操作层 */
+.operation-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #ebeef5; /* 增加分割线 */
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  /* 左侧加个竖条装饰，增加层次感 */
+  border-left: 4px solid #409EFF;
+  padding-left: 10px;
+}
+
+.right-panel {
+  display: flex;
+  gap: 10px;
+}
+
+/* 第二行：筛选层 */
+.search-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.search-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: 1; /* 占据左侧剩余空间 */
+}
+
+.search-btns {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0; /* 防止按钮被挤压 */
+}
+
+.filter-item {
+  /* 移除之前的 margin-bottom，改用 gap 控制 */
+  margin-bottom: 0; 
+}
+
+/* 控件宽度定义 */
+.w-name { width: 220px; } /*稍微加宽一点，显示名字更全*/
+.w-target { width: 140px; }
+.w-date { width: 320px !important; }
+
+/* --- 移动端适配 --- */
+.filter-wrapper-layered.is-mobile .operation-row {
+  /* 移动端标题可以稍微小一点，或者隐藏标题只留按钮 */
+  padding-bottom: 10px;
+}
+.filter-wrapper-layered.is-mobile .page-title {
+  font-size: 16px;
+}
+
+.filter-wrapper-layered.is-mobile .search-row {
+  flex-direction: column;
+  align-items: stretch; /* 拉伸占满宽度 */
+}
+
+.filter-wrapper-layered.is-mobile .search-inputs {
+  flex-direction: column;
+}
+
+.filter-wrapper-layered.is-mobile .w-name,
+.filter-wrapper-layered.is-mobile .w-target,
+.filter-wrapper-layered.is-mobile .w-date {
+  width: 100% !important; /* 移动端强制 100% 宽 */
+}
+
+.filter-wrapper-layered.is-mobile .search-btns {
+  display: flex;
+  /* 移动端按钮并排撑满 */
+}
+.filter-wrapper-layered.is-mobile .search-btns .el-button {
+  flex: 1;
 }
 </style>

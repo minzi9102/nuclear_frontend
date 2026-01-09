@@ -69,3 +69,29 @@ export const updatePatient = (documentId: string, data: any) => {
   const { documentId: _, treatments, id, ...dataToSubmit } = data
   return request.put(`/patients/${documentId}`, { data: dataToSubmit })
 }
+
+/**
+ * 🔍 下拉框专用：轻量级患者搜索
+ * @param query 搜索关键词 (姓名或DocumentId)
+ */
+export const searchPatients = (query: string) => {
+  const queryObject = {
+    filters: {
+      $or: [
+        { Name: { $contains: query } },
+        { documentId: { $contains: query } }
+      ]
+    },
+    // ✅ 性能优化：只取下拉框展示需要的字段，不查关联数据
+    fields: ['Name', 'Gender', 'Birthday', 'documentId'],
+    pagination: {
+      limit: 20 // 限制显示前 20 条，防止下拉框过长卡顿
+    }
+  }
+
+  const queryString = qs.stringify(queryObject, {
+    encodeValuesOnly: true
+  })
+
+  return request.get<any, ApiResponse<Patient>>(`/patients?${queryString}`)
+}

@@ -6,6 +6,7 @@ import { PAST_TREATMENT_OPTIONS, type PastTreatment } from '../../../constants/t
 import type { Patient } from '../../../api/types'
 import { Calendar } from '@element-plus/icons-vue'
 
+
 const emit = defineEmits(['success'])
 
 const visible = ref(false)

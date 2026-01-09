@@ -33,7 +33,7 @@
 import { Male, Female } from '@element-plus/icons-vue'
 import { PAST_TREATMENT_MAP } from '../../constants/treatment'
 
-const props = defineProps<{
+defineProps<{
   patient: any,
   treatmentCount: number
 }>()

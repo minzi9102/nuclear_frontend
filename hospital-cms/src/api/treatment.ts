@@ -67,3 +67,26 @@ export const getTreatmentDetail = (documentId: string) => {
 
   return request.get<any, { data: Treatment }>(`/treatments/${documentId}?${query}`)
 }
+
+/**
+ * 获取导出 URL (用于浏览器直接下载)
+ * @param filters 当前的筛选条件对象
+ */
+export const getExportUrl = (filters: Record<string, any>) => {
+  // 1. 复用列表的筛选条件
+  const queryObj = {
+    ...filters,
+    sort: 'updatedAt:desc', // 强制按时间倒序导出
+    // 注意：导出不需要 pagination，后端会自动处理流式遍历
+    // 注意：导出不需要 populate，后端 Service 内部已写死
+  }
+
+  // 2. 移除 pagination 参数 (如果传入了的话)
+  delete (queryObj as any)['pagination[page]'];
+  delete (queryObj as any)['pagination[pageSize]'];
+
+  // 关键：arrayFormat: 'indices' 确保 $or 查询被正确转换
+  const queryString = qs.stringify(queryObj, { encodeValuesOnly: true, arrayFormat: 'indices' });
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:1337';
+  return `${baseUrl}/api/treatments/export?${queryString}`;
+}
